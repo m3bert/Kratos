@@ -26,7 +26,7 @@
 #include "processes/variational_distance_calculation_process.h"
 #include "utilities/parallel_levelset_distance_calculator.h"
 #include "processes/calculate_signed_distance_to_3d_condition_skin_process.h"
-
+#include "mpi/utilities/gather_modelpart_utility.h"
 
 namespace Kratos
 {
@@ -88,7 +88,23 @@ public:
             it_node->SetValue(DISTANCE, 0.0);
         }
 
-        CalculateDistanceToSkinProcessType(rBackgroundModelPart, rSkinModelPart).Execute();
+        const DataCommunicator& r_comm =
+            rBackgroundModelPart.GetCommunicator().GetDataCommunicator();
+        const int mpi_size = r_comm.Size();
+        Model &current_model = rBackgroundModelPart.GetModel();
+        ModelPart &r_gathered_skin_mp = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredSkin") : rSkinModelPart;
+
+        // If it is distributed, gather on the rank 0 to do the distance calculation
+        if (r_comm.IsDistributed())
+        {
+            // After this, all the ranks have complete skin mp.
+            for (int rank=0; rank<mpi_size; ++rank)
+                GatherModelPartUtility(rank, rSkinModelPart, 0, r_gathered_skin_mp);
+        }
+
+        // This distance computation is always local to each rank.
+        // Now the bg modelpart has the distances from the skin.
+        CalculateDistanceToSkinProcessType(rBackgroundModelPart, r_gathered_skin_mp).Execute();
 
 
         // Parameters amgcl_settings(R"(
