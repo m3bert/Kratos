@@ -51,8 +51,8 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
 
         # Import parallel modules if needed
         # has to be done before the base-class constuctor is called (in which the solver is constructed)
-        if (parameters["problem_data"]["parallel_type"].GetString() == "MPI"):
-            raise Exception("MPI-Chimera is not implemented yet")
+        # if (parameters["problem_data"]["parallel_type"].GetString() == "MPI"):
+        #     raise Exception("MPI-Chimera is not implemented yet")
 
         self.full_parameters["solver_settings"].RemoveValue("chimera_settings")
         super(FluidChimeraAnalysis,self).__init__(model,self.full_parameters)
