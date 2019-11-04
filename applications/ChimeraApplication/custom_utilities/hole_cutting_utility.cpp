@@ -160,6 +160,9 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     // Create map to ask for number of faces for the given set of node ids
     // representing on face in the model part
     hashmap n_faces_map;
+    const auto& r_comm = rVolumeModelPart.GetCommunicator();
+    const bool& is_distributed = r_comm.IsDistributed();
+    const auto& r_ghost_mesh = r_comm.GhostMesh();
     const int num_elements =
         static_cast<int>(rVolumeModelPart.NumberOfElements());
     const auto elements_begin = rVolumeModelPart.ElementsBegin();
@@ -176,6 +179,16 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
         for (IndexType i_face = 0; i_face < faces.size(); i_face++)
         {
+            if(is_distributed)
+            {
+                // Check if all the nodes of this face are on
+                bool ghost_face = true;
+                for (IndexType i = 0; i < faces[i_face].size(); i++)
+                    ghost_face &= r_ghost_mesh.HasNode( faces[i_face][i].Id() );
+
+                if(ghost_face)
+                    continue;
+            }
             // Create vector that stores all node is of current i_face
             vector<IndexType> ids(faces[i_face].size());
 
@@ -209,6 +222,16 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
         for (IndexType i_face = 0; i_face < faces.size(); i_face++)
         {
+            if(is_distributed)
+            {
+                // Check if all the nodes of this face are on
+                bool ghost_face = true;
+                for (IndexType i = 0; i < faces[i_face].size(); i++)
+                    ghost_face &= r_ghost_mesh.HasNode( faces[i_face][i].Id() );
+
+                if(ghost_face)
+                    continue;
+            }
             // Create vector that stores all node is of current i_face
             vector<IndexType> ids(faces[i_face].size());
             vector<IndexType> unsorted_ids(faces[i_face].size());
