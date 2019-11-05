@@ -142,6 +142,10 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
             return seed;
         }
     };
+    if(rVolumeModelPart.NumberOfNodes() <= 0)
+    { // No nodes so there can be no boundary.
+        return;
+    }
 
     IndexType n_nodes = rVolumeModelPart.ElementsBegin()->GetGeometry().size();
     KRATOS_ERROR_IF(!(n_nodes != 3 || n_nodes != 4))
@@ -160,9 +164,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     // Create map to ask for number of faces for the given set of node ids
     // representing on face in the model part
     hashmap n_faces_map;
-    const auto& r_comm = rVolumeModelPart.GetCommunicator();
-    const bool& is_distributed = r_comm.IsDistributed();
-    const auto& r_ghost_mesh = r_comm.GhostMesh();
     const int num_elements =
         static_cast<int>(rVolumeModelPart.NumberOfElements());
     const auto elements_begin = rVolumeModelPart.ElementsBegin();
@@ -179,16 +180,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
         for (IndexType i_face = 0; i_face < faces.size(); i_face++)
         {
-            if(is_distributed)
-            {
-                // Check if all the nodes of this face are on
-                bool ghost_face = true;
-                for (IndexType i = 0; i < faces[i_face].size(); i++)
-                    ghost_face &= r_ghost_mesh.HasNode( faces[i_face][i].Id() );
-
-                if(ghost_face)
-                    continue;
-            }
             // Create vector that stores all node is of current i_face
             vector<IndexType> ids(faces[i_face].size());
 
@@ -222,16 +213,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
         for (IndexType i_face = 0; i_face < faces.size(); i_face++)
         {
-            if(is_distributed)
-            {
-                // Check if all the nodes of this face are on
-                bool ghost_face = true;
-                for (IndexType i = 0; i < faces[i_face].size(); i++)
-                    ghost_face &= r_ghost_mesh.HasNode( faces[i_face][i].Id() );
-
-                if(ghost_face)
-                    continue;
-            }
             // Create vector that stores all node is of current i_face
             vector<IndexType> ids(faces[i_face].size());
             vector<IndexType> unsorted_ids(faces[i_face].size());
@@ -255,6 +236,9 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     // First assign to skin model part all nodes from original model_part,
     // unnecessary nodes will be removed later
     IndexType id_condition = 1;
+    const auto& r_comm = rVolumeModelPart.GetCommunicator();
+    const bool& is_distributed = r_comm.IsDistributed();
+    const auto& r_interface_mesh = r_comm.InterfaceMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -278,6 +262,16 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     rVolumeModelPart.Nodes()(original_nodes_order[0]);
                 Node<3>::Pointer pnode2 =
                     rVolumeModelPart.Nodes()(original_nodes_order[1]);
+
+                if(is_distributed)
+                {
+                    // Check if all the nodes of this face are on
+                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
+
+                    if(ghost_face)
+                        continue;
+                }
 
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
@@ -309,6 +303,17 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     rVolumeModelPart.Nodes()(original_nodes_order[1]);
                 Node<3>::Pointer pnode3 =
                     rVolumeModelPart.Nodes()(original_nodes_order[2]);
+
+                if(is_distributed)
+                {
+                    // Check if all the nodes of this face are on
+                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[2] );
+
+                    if(ghost_face)
+                        continue;
+                }
 
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
@@ -343,6 +348,17 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     rVolumeModelPart.Nodes()(original_nodes_order[2]);
                 Node<3>::Pointer pnode4 =
                     rVolumeModelPart.Nodes()(original_nodes_order[3]);
+                if(is_distributed)
+                {
+                    // Check if all the nodes of this face are on
+                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[2] );
+                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[3] );
+
+                    if(ghost_face)
+                        continue;
+                }
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
                 vector_of_node_ids.push_back(original_nodes_order[1]);
