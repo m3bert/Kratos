@@ -134,6 +134,8 @@ public:
      */
     static inline void CalculateBoundingBox(const PointerType& rObject, PointType& rLowPoint, PointType& rHighPoint)
     {
+        if(rObject == nullptr)
+            return;
         rHighPoint = rObject->GetGeometry().GetPoint(0);
         rLowPoint  = rObject->GetGeometry().GetPoint(0);
         for (unsigned int point = 0; point<rObject->GetGeometry().PointsNumber(); point++)
@@ -151,6 +153,8 @@ public:
      */
     static inline void CalculateBoundingBox(const PointerType& rObject, PointType& rLowPoint, PointType& rHighPoint, const double Radius)
     {
+        if(rObject == nullptr)
+            return;
         (void)Radius;
         CalculateBoundingBox(rObject, rLowPoint, rHighPoint);
     }

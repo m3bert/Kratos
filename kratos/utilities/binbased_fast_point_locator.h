@@ -132,6 +132,11 @@ public:
         // Copy the entities to a new container, as the list will be shuffled duringthe construction of the tree
         ContainerType entities_array;
         GetContainer(mrModelPart, entities_array);
+        if(entities_array.size()<=0){
+            KRATOS_INFO("BinBasedFastPointLocator")<<"No entities in given modelpart."<<std::endl;
+            return;
+        }
+
         IteratorType it_begin = entities_array.begin();
         IteratorType it_end = entities_array.end();
 
@@ -152,6 +157,9 @@ public:
         // Copy the entities to a new container, as the list will be shuffled duringthe construction of the tree
         ContainerType entities_array;
         GetContainer(mrModelPart, entities_array);
+        if(entities_array.size()<=0){
+            return;
+        }
         IteratorType it_begin = entities_array.begin();
         IteratorType it_end = entities_array.end();
 
@@ -184,6 +192,10 @@ public:
         const double Tolerance = 1.0e-5
         )
     {
+        if(mpBinsObjectDynamic == nullptr){
+            return false;
+        }
+
         // Ask to the container for the list of candidate entities
         SizeType results_found = mpBinsObjectDynamic->SearchObjectsInCell(PointType{rCoordinates}, ItResultBegin, MaxNumberOfResults);
 
@@ -233,6 +245,10 @@ public:
         const double Tolerance = 1.0e-5
         )
     {
+        if(mpBinsObjectDynamic == nullptr){
+            return false;
+        }
+
         // Ask to the container for the list of candidate entities
         const int results_found = mpBinsObjectDynamic->SearchObjectsInCell(typename BinsObjectDynamic<ConfigureType>::PointType{rCoordinates}, ItResultBegin, MaxNumberOfResults);
 
