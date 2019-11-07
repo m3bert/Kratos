@@ -231,7 +231,7 @@ class PfemFluidSolver(PythonSolver):
         self.computing_model_part_name = "fluid_computing_domain"
 
         # we can use the default implementation in the base class
-        self._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
+        #self._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
 
         # Auxiliary Kratos parameters object to be called by the CheckAndPepareModelProcess
         params = KratosMultiphysics.Parameters("{}")
