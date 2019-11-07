@@ -47,20 +47,20 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         # defining the number of threads:
         num_threads = parameters["problem_data"]["threads"].GetInt()
         self.SetParallelSize(num_threads)
-        self.KratosPrintInfo("::[KPFEM Simulation]:: [OMP USING" + str(num_threads) + "THREADS ]")
+        self.KratosPrintInfo("::[KPFEM Simulation]:: [OMP USING " + str(num_threads) + " THREADS]")
         #parallel.PrintOMPInfo()
 
         self.KratosPrintInfo(" ")
-        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
+        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
 
         #### Model_part settings start ####
         super(PfemFluidDynamicsAnalysis,self).__init__(model,parameters)
         # Defining the model_part
         self.main_model_part = self.model.GetModelPart(parameters["solver_settings"]["model_part_name"].GetString())
 
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["fluid_solver_settings"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["fluid_solver_settings"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble())
         self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.TIME, parameters["problem_data"]["start_time"].GetDouble())
         if parameters["problem_data"].Has("gravity_vector"):
              self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.GRAVITY_X, parameters["problem_data"]["gravity_vector"][0].GetDouble())
@@ -80,16 +80,15 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         return solver
 
     def AddNodalVariablesToModelPart(self):
-        from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
-        pfem_variables.AddVariables(self.main_model_part)
+        #from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
+        #pfem_variables.AddVariables(self.main_model_part)
+        pass
 
     def Initialize(self):
         """This function initializes the AnalysisStage
         Usage: It is designed to be called ONCE, BEFORE the execution of the solution-loop
         This function has to be implemented in deriving classes!
         """
-        # Add variables (always before importing the model part)
-        self.AddNodalVariablesToModelPart()
 
         # Read model_part (note: the buffer_size is set here) (restart is read here)
         self._solver.ImportModelPart()
@@ -157,7 +156,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         self.time = self.main_model_part.ProcessInfo[KratosMultiphysics.TIME]
 
         self.end_time   = self.project_parameters["problem_data"]["end_time"].GetDouble()
-        self.delta_time = self.project_parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()
+        self.delta_time = self.project_parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble()
 
 
     def InitializeSolutionStep(self):
@@ -165,9 +164,20 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         (for each step) BEFORE solving the solution step.
         """
         self.clock_time = self.StartTimeMeasuring()
+        #print("*****BEFORE REMESH*****")
+        #for node in self._solver.fluid_solver.main_model_part.Nodes:
+        #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))
+        self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
+        
         # processes to be executed at the begining of the solution step
         self.model_processes.ExecuteInitializeSolutionStep()
-
+        
+        #print("*****AFTER REMESH*****") 
+        #for node in self._solver.fluid_solver.main_model_part.Nodes:
+        #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))       
+        
+        self._solver.AuxiliarCallsAfterRemesh()
+        
         for process in self._GetListOfProcesses():
             process.ExecuteInitializeSolutionStep()
 
@@ -182,16 +192,16 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         """This function performs all the required operations that should be executed
         (for each step) AFTER solving the solution step.
         """
-        self.clock_time = self.StartTimeMeasuring();
+        self.clock_time = self.StartTimeMeasuring()
         self._GetSolver().FinalizeSolutionStep()
         self.GraphicalOutputExecuteFinalizeSolutionStep()
 
         # processes to be executed at the end of the solution step
-        self.model_processes.ExecuteFinalizeSolutionStep()
+        self.model_processes.ExecuteFinalizeSolutionStep() # it calculates the volume after the remeshing process
 
         for process in self._GetListOfProcesses():
             process.ExecuteFinalizeSolutionStep()
-        self.model_processes.ExecuteBeforeOutputStep()
+        self.model_processes.ExecuteBeforeOutputStep() #simply pass
 
         for process in self._GetListOfProcesses():
             process.ExecuteBeforeOutputStep()
@@ -200,12 +210,12 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         self.GraphicalOutputPrintOutput()
 
         # processes to be executed after witting the output
-        self.model_processes.ExecuteAfterOutputStep()
+        self.model_processes.ExecuteAfterOutputStep() #this process remesh the fluid domains if the flag "meshing_before_output" is set to false
 
         for process in self._GetListOfProcesses():
             process.ExecuteAfterOutputStep()
 
-        self.StopTimeMeasuring(self.clock_time,"Finalize Step" , self.report);
+        self.StopTimeMeasuring(self.clock_time,"Finalize Step" , self.report)
 
     def OutputSolutionStep(self):
         """This function printed / writes output files after the solution of a step
@@ -333,9 +343,11 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         """This function can be overridden in derived classes if the order of
         initialization for the processes matters
         """
-        return ["constraints_process_list",
+        return ["initial_conditions_process_list",
+                "constraints_process_list",
                 "loads_process_list",
-                "auxiliar_process_list"]
+                "auxiliar_process_list",
+                "list_other_processes"]
 
     #### Main internal methods ####
 
