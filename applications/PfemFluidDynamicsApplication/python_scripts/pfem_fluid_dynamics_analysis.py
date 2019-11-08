@@ -52,16 +52,17 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #parallel.PrintOMPInfo()
 
         self.KratosPrintInfo(" ")
-        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
+        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
 
         #### Model_part settings start ####
         super(PfemFluidDynamicsAnalysis,self).__init__(model,parameters)
+
         # Defining the model_part
         self.main_model_part = self.model.GetModelPart(parameters["solver_settings"]["model_part_name"].GetString())
 
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["problem_data"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["problem_data"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["problem_data"]["time_stepping"]["time_step"].GetDouble())
         self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.TIME, parameters["problem_data"]["start_time"].GetDouble())
         if parameters["problem_data"].Has("gravity_vector"):
              self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.GRAVITY_X, parameters["problem_data"]["gravity_vector"][0].GetDouble())
@@ -92,6 +93,8 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         Usage: It is designed to be called ONCE, BEFORE the execution of the solution-loop
         This function has to be implemented in deriving classes!
         """
+        # Add variables (always before importing the model part)
+        self.AddNodalVariablesToModelPart()
 
         # Read model_part (note: the buffer_size is set here) (restart is read here)
         self._solver.ImportModelPart()
@@ -170,7 +173,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #print("*****BEFORE REMESH*****")
         #for node in self._solver.fluid_solver.main_model_part.Nodes:
         #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))
-        self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
+        #self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
         
         # processes to be executed at the begining of the solution step
         self.model_processes.ExecuteInitializeSolutionStep()
@@ -179,7 +182,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #for node in self._solver.fluid_solver.main_model_part.Nodes:
         #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))       
         
-        self._solver.AuxiliarCallsAfterRemesh()
+        #self._solver.AuxiliarCallsAfterRemesh()
         
         for process in self._GetListOfProcesses():
             process.ExecuteInitializeSolutionStep()
