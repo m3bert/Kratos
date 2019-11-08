@@ -163,7 +163,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         self.time = self.main_model_part.ProcessInfo[KratosMultiphysics.TIME]
 
         self.end_time   = self.project_parameters["problem_data"]["end_time"].GetDouble()
-        self.delta_time = self.project_parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()
+        self.delta_time = self.project_parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()
 
 
     def InitializeSolutionStep(self):
