@@ -248,13 +248,23 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         """
 
         # We clean the computing before remesh
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.GetComputingModelPart().Nodes)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.GetComputingModelPart().Elements)
+        
         KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Nodes)
-        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
         KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Elements)
-
-        self.thermal_solver.GetComputingModelPart().RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
-        self.thermal_solver.GetComputingModelPart().RemoveConditionsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        self.thermal_solver.GetComputingModelPart().RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
+        
+        #self.thermal_solver.main_model_part.RemoveNodes(KratosMultiphysics.TO_ERASE)
+        #self.thermal_solver.main_model_part.RemoveElements(KratosMultiphysics.TO_ERASE)
+        
+        self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
+        self.thermal_solver.main_model_part.RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
+        
+        #self.thermal_solver.GetComputingModelPart().RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
+        #self.thermal_solver.GetComputingModelPart().RemoveConditionsFromAllLevels(KratosMultiphysics.TO_ERASE)
+        #self.thermal_solver.GetComputingModelPart().RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
         
         # We remove the thermal computing domain 
         #self.thermal_solver.main_model_part.RemoveSubModelPart(self.thermal_solver.GetComputingModelPart())
@@ -264,6 +274,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         
         # We want to avoid the removal of the fluid nodes in the next remesh process
         KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Nodes)
+        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Elements)
         
     def AuxiliarCallsAfterRemesh(self):
         """ This method is executed right after execute the remesh
