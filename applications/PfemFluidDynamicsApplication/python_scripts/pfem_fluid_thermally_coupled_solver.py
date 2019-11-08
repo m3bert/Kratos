@@ -150,11 +150,11 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
                                       self.thermal_solver.main_model_part,
                                       "EulerianConvDiff3D",
                                       "ThermalFace3D3N")
-        self.fluid_solver.ImportModelPart()
+        #self.fluid_solver.ImportModelPart()
         # Set the saved convection diffusion settings to the new thermal model part
         self.thermal_solver.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.CONVECTION_DIFFUSION_SETTINGS, convection_diffusion_settings)
         
-        self.thermal_solver.PrepareModelPart()
+        #self.thermal_solver.PrepareModelPart()
 
     def AddDofs(self):
         self.fluid_solver.AddDofs()
@@ -286,5 +286,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
                 node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id, elem.GetNode(3).Id]                    
                 self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff3D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
       
-
+    def PrepareModelPart(self):
+        self.fluid_solver.PrepareModelPart()
+        self.thermal_solver.PrepareModelPart()
     
