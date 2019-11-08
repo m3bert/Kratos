@@ -125,8 +125,8 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
     def AddVariables(self):
         # Import the fluid and thermal solver variables. Then merge them to have them in both fluid and thermal solvers.
         self.fluid_solver.AddVariables()
-        from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
-        pfem_variables.AddVariables(self.fluid_solver.main_model_part)
+        #from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
+        #pfem_variables.AddVariables(self.fluid_solver.main_model_part)
         self.thermal_solver.AddVariables()
         KratosMultiphysics.MergeVariableListsUtility().Merge(self.fluid_solver.main_model_part, self.thermal_solver.main_model_part)
         print("::[Coupled Pfem Fluid Thermal Solver]:: Variables MERGED")
