@@ -15,7 +15,7 @@ def CreateSolverByParameters(model, solver_settings, parallelism):
     if solver_type == "pfem_fluid_solver" or solver_type == "PfemFluid":
         solver_module_name = "pfem_fluid_solver"
 
-    elif solver_type == "pfem_fluid_thermally_coupled" or solver_type == "PfemFluidThermallyCoupled":
+    elif solver_type == "pfem_fluid_thermally_coupled_solver" or solver_type == "PfemFluidThermallyCoupled":
         solver_module_name = "pfem_fluid_thermally_coupled_solver"
 
     else:
