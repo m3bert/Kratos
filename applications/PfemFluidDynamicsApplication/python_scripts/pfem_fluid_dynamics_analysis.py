@@ -11,6 +11,7 @@ import KratosMultiphysics.DelaunayMeshingApplication
 import KratosMultiphysics.PfemFluidDynamicsApplication
 
 from KratosMultiphysics.analysis_stage import AnalysisStage
+from KratosMultiphysics.PfemFluidDynamicsApplication import python_solvers_wrapper_pfem_fluid as solver_wrapper
 
 class PfemFluidDynamicsAnalysis(AnalysisStage):
     """The base class for the PfemFluidDynamicsAnalysis
@@ -51,16 +52,16 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #parallel.PrintOMPInfo()
 
         self.KratosPrintInfo(" ")
-        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
+        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
 
         #### Model_part settings start ####
         super(PfemFluidDynamicsAnalysis,self).__init__(model,parameters)
         # Defining the model_part
         self.main_model_part = self.model.GetModelPart(parameters["solver_settings"]["model_part_name"].GetString())
 
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["fluid_solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["fluid_solver_settings"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble())
         self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.TIME, parameters["problem_data"]["start_time"].GetDouble())
         if parameters["problem_data"].Has("gravity_vector"):
              self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.GRAVITY_X, parameters["problem_data"]["gravity_vector"][0].GetDouble())
@@ -73,16 +74,18 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
     def _CreateSolver(self):
         """Create the solver
         """
-        python_module_name = "KratosMultiphysics.PfemFluidDynamicsApplication"
-        full_module_name = python_module_name + "." + self.project_parameters["solver_settings"]["solver_type"].GetString()
-        solver_module = import_module(full_module_name)
-        solver = solver_module.CreateSolver(self.model, self.project_parameters["solver_settings"])
-        return solver
+        return solver_wrapper.CreateSolverByParameters(self.model, self.project_parameters["solver_settings"],self.project_parameters["problem_data"]["parallel_type"].GetString())
+
+        #python_module_name = "KratosMultiphysics.PfemFluidDynamicsApplication"
+        #full_module_name = python_module_name + "." + self.project_parameters["solver_settings"]["solver_type"].GetString()
+        #solver_module = import_module(full_module_name)
+        #solver = solver_module.CreateSolver(self.model, self.project_parameters["solver_settings"])
+        #return solver
 
     def AddNodalVariablesToModelPart(self):
-        #from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
-        #pfem_variables.AddVariables(self.main_model_part)
-        pass
+        from KratosMultiphysics.PfemFluidDynamicsApplication import pfem_variables
+        pfem_variables.AddVariables(self.main_model_part)
+        #pass
 
     def Initialize(self):
         """This function initializes the AnalysisStage
@@ -156,7 +159,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         self.time = self.main_model_part.ProcessInfo[KratosMultiphysics.TIME]
 
         self.end_time   = self.project_parameters["problem_data"]["end_time"].GetDouble()
-        self.delta_time = self.project_parameters["solver_settings"]["fluid_solver_settings"]["time_stepping"]["time_step"].GetDouble()
+        self.delta_time = self.project_parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()
 
 
     def InitializeSolutionStep(self):
