@@ -30,11 +30,17 @@ if(${KRATOS_BUILD_TESTING} MATCHES ON)
     file(GLOB_RECURSE KRATOS_CHIMERA_APPLICATION_TESTING_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
 endif(${KRATOS_BUILD_TESTING} MATCHES ON)
 
+if((${MPI_NEEDED} MATCHES ON))
+ set(EXTRA_LIBRARIES "KratosMPICore")
+else()
+ set(EXTRA_LIBRARIES "")
+endif((${MPI_NEEDED} MATCHES ON))
+
 ## ChimeraApplication python interface sources
 file(GLOB_RECURSE KRATOS_CHIMERA_APPLICATION_PYTHON_INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/custom_python/*.cpp)
 
 add_library(KratosChimeraApplicationCore SHARED ${KRATOS_CHIMERA_APPLICATION_CORE} ${KRATOS_CHIMERA_APPLICATION_TESTING_SOURCES})
-target_link_libraries(KratosChimeraApplicationCore PUBLIC KratosCore KratosFluidDynamicsCore)
+target_link_libraries(KratosChimeraApplicationCore PUBLIC KratosCore ${EXTRA_LIBRARIES} KratosFluidDynamicsCore)
 set_target_properties(KratosChimeraApplicationCore PROPERTIES COMPILE_DEFINITIONS "CHIMERA_APPLICATION=EXPORT,API")
 
 ###############################################################
