@@ -25,9 +25,10 @@
 #include "mpi/utilities/gather_modelpart_utility.h"
 #include "processes/fast_transfer_between_model_parts_process.h"
 
+#ifdef KRATOS_USING_MPI
 #include "mpi/utilities/parallel_fill_communicator.h"
+#endif
 #include "includes/data_communicator.h"
-#include "mpi/includes/mpi_communicator.h"
 
 namespace Kratos
 {
@@ -131,10 +132,7 @@ public:
             rModelPartToGather.GetNodalSolutionStepVariablesList();
         if (r_comm.IsDistributed())
         {
-        VariablesList* pVariablesList =
-            &rGatheredModelPart.GetNodalSolutionStepVariablesList();
-        rGatheredModelPart.SetCommunicator(
-            Communicator::Pointer(new MPICommunicator(pVariablesList, r_comm)));
+            rGatheredModelPart.SetCommunicator(rModelPartToGather.pGetCommunicator());
         }
         rGatheredModelPart.SetBufferSize(rModelPartToGather.GetBufferSize());
 
@@ -275,7 +273,9 @@ public:
 
         if (r_comm.IsDistributed())
         {
+#ifdef KRATOS_USING_MPI
             ParallelFillCommunicator(rGatheredModelPart).Execute();
+#endif
         }
     }
 

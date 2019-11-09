@@ -1,5 +1,11 @@
 #include "hole_cutting_utility.h"
 
+#ifdef KRATOS_USING_MPI
+#include "mpi/utilities/parallel_fill_communicator.h"
+#endif
+#include "includes/data_communicator.h"
+
+
 namespace Kratos
 {
 
@@ -20,7 +26,7 @@ void ChimeraHoleCuttingUtility::CreateHoleAfterDistance(
 
 template <int TDim>
 void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
-    ModelPart &rModelPart, ModelPart &rModifiedModelPart,
+    ModelPart &rModelPart, ModelPart &rRemovedModelPart,
     const ChimeraHoleCuttingUtility::Domain DomainType, const double OverLapDistance,
     const ChimeraHoleCuttingUtility::SideToExtract Side)
 {
@@ -29,7 +35,8 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
 
     int count = 0;
 
-    for (auto &i_element : rModelPart.Elements())
+    const auto& r_local_mesh = rModelPart.GetCommunicator().LocalMesh();
+    for (auto &i_element : r_local_mesh.Elements())
     {
         double nodal_distance = 0.0;
         IndexType numPointsOutside = 0;
@@ -56,7 +63,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
             i_element.Set(ACTIVE, false);
             IndexType num_nodes_per_elem = i_element.GetGeometry().PointsNumber();
             if (Side == ChimeraHoleCuttingUtility::SideToExtract::INSIDE)
-                rModifiedModelPart.AddElement(rModelPart.pGetElement(i_element.Id()));
+                rRemovedModelPart.AddElement(rModelPart.pGetElement(i_element.Id()));
             for (j = 0; j < num_nodes_per_elem; j++)
             {
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_X, 0) =
@@ -86,7 +93,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
                 count++;
                 IndexType num_nodes_per_elem =
                     i_element.GetGeometry().PointsNumber(); // Size()
-                rModifiedModelPart.AddElement(
+                rRemovedModelPart.AddElement(
                     rModelPart.pGetElement(i_element.Id())); // AddElement()
                 for (j = 0; j < num_nodes_per_elem; j++)
                     vector_of_node_ids.push_back(i_element.GetGeometry()[j].Id());
@@ -103,9 +110,18 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
          i_node_id != vector_of_node_ids.end(); i_node_id++)
     {
         Node<3>::Pointer pnode = rModelPart.Nodes()(*i_node_id);
-        rModifiedModelPart.AddNode(pnode);
+        rRemovedModelPart.AddNode(pnode);
     }
 
+    // Taking care of the communicator stuff.
+    const auto &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
+    if (r_comm.IsDistributed())
+    {
+        rRemovedModelPart.SetCommunicator(rModelPart.pGetCommunicator());
+#ifdef KRATOS_USING_MPI
+        ParallelFillCommunicator(rRemovedModelPart).Execute();
+#endif
+    }
     KRATOS_CATCH("");
 }
 
@@ -116,7 +132,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 {
     KRATOS_TRY;
 
-   // Needed structures for the ExtractSurfaceMesh operation
+    // Needed structures for the ExtractSurfaceMesh operation
     struct KeyComparator
     {
         bool operator()(const vector<IndexType> &lhs,
@@ -142,16 +158,21 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
             return seed;
         }
     };
-    if(rVolumeModelPart.NumberOfNodes() <= 0)
-    { // No nodes so there can be no boundary.
-        return;
+    // Taking care of the communicator stuff.
+    const auto &r_data_comm = rVolumeModelPart.GetCommunicator().GetDataCommunicator();
+    if (r_data_comm.IsDistributed())
+    {
+        rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
+#ifdef KRATOS_USING_MPI
+        ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
+#endif
     }
 
-    IndexType n_nodes = rVolumeModelPart.ElementsBegin()->GetGeometry().size();
-    KRATOS_ERROR_IF(!(n_nodes != 3 || n_nodes != 4))
-        << "Hole cutting process is only supported for tetrahedral and "
-           "triangular elements"
-        << std::endl;
+    // IndexType n_nodes = rVolumeModelPart.ElementsBegin()->GetGeometry().size();
+    // KRATOS_ERROR_IF(!(n_nodes != 3 || n_nodes != 4))
+    //     << "Hole cutting process is only supported for tetrahedral and "
+    //        "triangular elements"
+    //     << std::endl;
 
     // Some type-definitions
     typedef std::unordered_map<vector<IndexType>, IndexType, KeyHasher,
@@ -236,9 +257,9 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     // First assign to skin model part all nodes from original model_part,
     // unnecessary nodes will be removed later
     IndexType id_condition = 1;
-    const auto& r_comm = rVolumeModelPart.GetCommunicator();
-    const bool& is_distributed = r_comm.IsDistributed();
-    const auto& r_interface_mesh = r_comm.InterfaceMesh();
+    const auto &r_comm = rVolumeModelPart.GetCommunicator();
+    const bool &is_distributed = r_comm.IsDistributed();
+    const auto &r_interface_mesh = r_comm.InterfaceMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -263,13 +284,13 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 Node<3>::Pointer pnode2 =
                     rVolumeModelPart.Nodes()(original_nodes_order[1]);
 
-                if(is_distributed)
+                if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
 
-                    if(ghost_face)
+                    if (ghost_face)
                         continue;
                 }
 
@@ -304,14 +325,14 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 Node<3>::Pointer pnode3 =
                     rVolumeModelPart.Nodes()(original_nodes_order[2]);
 
-                if(is_distributed)
+                if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[2] );
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[2]);
 
-                    if(ghost_face)
+                    if (ghost_face)
                         continue;
                 }
 
@@ -348,15 +369,15 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     rVolumeModelPart.Nodes()(original_nodes_order[2]);
                 Node<3>::Pointer pnode4 =
                     rVolumeModelPart.Nodes()(original_nodes_order[3]);
-                if(is_distributed)
+                if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_interface_mesh.HasNode( original_nodes_order[0] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[1] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[2] );
-                    ghost_face = ghost_face && r_interface_mesh.HasNode( original_nodes_order[3] );
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[2]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[3]);
 
-                    if(ghost_face)
+                    if (ghost_face)
                         continue;
                 }
                 // Storing the node ids list
@@ -448,6 +469,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
     rExtractedBoundaryModelPart.RemoveConditions(TO_ERASE);
     rExtractedBoundaryModelPart.RemoveNodes(TO_ERASE);
+
     KRATOS_CATCH("");
 }
 
@@ -455,24 +477,23 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 // Specializeing the functions for diff templates
 //
 template void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements<2>(ModelPart &rModelPart,
-                                ModelPart &rModifiedModelPart,
-                                const ChimeraHoleCuttingUtility::Domain DomainType,
-                                const double OverLapDistance,
-                                const ChimeraHoleCuttingUtility::SideToExtract Side);
+                                                                      ModelPart &rRemovedModelPart,
+                                                                      const ChimeraHoleCuttingUtility::Domain DomainType,
+                                                                      const double OverLapDistance,
+                                                                      const ChimeraHoleCuttingUtility::SideToExtract Side);
 
 template void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements<3>(ModelPart &rModelPart,
-                                ModelPart &rModifiedModelPart,
-                                const ChimeraHoleCuttingUtility::Domain DomainType,
-                                const double OverLapDistance,
-                                const ChimeraHoleCuttingUtility::SideToExtract Side);
+                                                                      ModelPart &rRemovedModelPart,
+                                                                      const ChimeraHoleCuttingUtility::Domain DomainType,
+                                                                      const double OverLapDistance,
+                                                                      const ChimeraHoleCuttingUtility::SideToExtract Side);
 
-template void ChimeraHoleCuttingUtility::ExtractBoundaryMesh<2>( ModelPart &rVolumeModelPart,
-                                                                 ModelPart &rExtractedBoundaryModelPart,
-                                                                 const ChimeraHoleCuttingUtility::SideToExtract GetInternal);
-template void ChimeraHoleCuttingUtility::ExtractBoundaryMesh<3>( ModelPart &rVolumeModelPart,
-                                                                 ModelPart &rExtractedBoundaryModelPart,
-                                                                 const ChimeraHoleCuttingUtility::SideToExtract GetInternal);
-
+template void ChimeraHoleCuttingUtility::ExtractBoundaryMesh<2>(ModelPart &rVolumeModelPart,
+                                                                ModelPart &rExtractedBoundaryModelPart,
+                                                                const ChimeraHoleCuttingUtility::SideToExtract GetInternal);
+template void ChimeraHoleCuttingUtility::ExtractBoundaryMesh<3>(ModelPart &rVolumeModelPart,
+                                                                ModelPart &rExtractedBoundaryModelPart,
+                                                                const ChimeraHoleCuttingUtility::SideToExtract GetInternal);
 
 template void ChimeraHoleCuttingUtility::CreateHoleAfterDistance<2>(ModelPart &rModelPart,
                                                                     ModelPart &rHoleModelPart,
@@ -482,6 +503,5 @@ template void ChimeraHoleCuttingUtility::CreateHoleAfterDistance<3>(ModelPart &r
                                                                     ModelPart &rHoleModelPart,
                                                                     ModelPart &rHoleBoundaryModelPart,
                                                                     const double Distance);
-
 
 } // namespace Kratos
