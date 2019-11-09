@@ -83,19 +83,20 @@ public:
             it_node->FastGetSolutionStepValue(DISTANCE, 1) = 0.0;
             it_node->SetValue(DISTANCE, 0.0);
         }
-
+        Model &current_model = rVolumeModelPart.GetModel();
         const DataCommunicator &r_comm =
             rVolumeModelPart.GetCommunicator().GetDataCommunicator();
-        rSkinModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
-        Model &current_model = rVolumeModelPart.GetModel();
         ModelPart &r_gathered_skin_mp = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredSkin") : rSkinModelPart;
 
+#ifdef KRATOS_USING_MPI
+        rSkinModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
         // If it is distributed, gather on the rank 0 to do the distance calculation
         if (r_comm.IsDistributed())
         {
             DistanceCalculationUtility::GatherModelPartOnAllRanks(rSkinModelPart, r_gathered_skin_mp);
         }
         r_comm.Barrier();
+#endif
 
         // This distance computation is always local to each rank.
         // Now the bg modelpart has the distances from the skin.
