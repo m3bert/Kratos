@@ -100,7 +100,7 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
     def InitializeSolutionStep(self):
         self.ApplyBoundaryConditions() #here the processes are called
         self.ChangeMaterialProperties() #this is normally empty
-        ## The following will construct the constraints 
+        ## The following will construct the constraints
         self.chimera_process.ExecuteInitializeSolutionStep()
         self._GetSolver().InitializeSolutionStep()
         self.PrintAnalysisStageProgressInformation()
