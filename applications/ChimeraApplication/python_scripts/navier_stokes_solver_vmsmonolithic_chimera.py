@@ -33,7 +33,6 @@ class NavierStokesSolverMonolithicChimera(NavierStokesSolverMonolithic):
             for chimera_part_levels in self.settings["chimera_settings"]["chimera_parts"]:
                 for chimera_part_settings in chimera_part_levels:
                     chimera_mp_file_names.append( chimera_part_settings["input_filename"].GetString() )
-                    chimera_part_settings.RemoveValue("input_filename")
 
             KratosChimera.chimera_modelpart_import as chim_mp_imp
             chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_file_names, parallel_type="OpenMP")
