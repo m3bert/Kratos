@@ -42,7 +42,6 @@ def ImportChimeraModelparts(main_modelpart, new_mp_file_names, parallel_type="Op
             mpi_import_utility.ImportModelPart()
             mpi_import_utility.CreateCommunicators()
             AddModelPart(main_modelpart, model_part)
-            ## now we have to renumber the nodes in
 
 
 def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
