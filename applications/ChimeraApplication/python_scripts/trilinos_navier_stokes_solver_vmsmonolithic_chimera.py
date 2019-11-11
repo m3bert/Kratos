@@ -29,6 +29,18 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
 
         KratosMultiphysics.Logger.PrintInfo("TrilinosNavierStokesSolverMonolithic", "Fluid solver variables added correctly.")
 
+    def ImportModelPart(self):
+        if(self.settings["model_import_settings"]["input_type"].GetString() == "chimera"):
+            chimera_mp_file_names = []
+            for chimera_part_levels in self.settings["chimera_settings"]["chimera_parts"]:
+                for chimera_part_settings in chimera_part_levels:
+                    chimera_mp_file_names.append( chimera_part_settings["input_filename"].GetString() )
+
+            KratosChimera.chimera_modelpart_import as chim_mp_imp
+            chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_file_names, parallel_type="MPI")
+        else:# we can use the default implementation in the base class
+            super(NavierStokesSolverMonolithicChimera,self)._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
+
     def Initialize(self):
 
         ## Construct the communicator
