@@ -102,21 +102,21 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
         self.ChangeMaterialProperties() #this is normally empty
         ## The following will construct the constraints
         self.chimera_process.ExecuteInitializeSolutionStep()
-        self._GetSolver().InitializeSolutionStep()
+        #self._GetSolver().InitializeSolutionStep()
         self.PrintAnalysisStageProgressInformation()
 
-    #def RunSolutionLoop(self):
-        #"""This function executes the solution loop of the AnalysisStage
-        #It can be overridden by derived classes
-        #"""
-        #while self.KeepAdvancingSolutionLoop():
-            #self.time = self._GetSolver().AdvanceInTime(self.time)
-            #self.InitializeSolutionStep()
-            ##self._GetSolver().Predict()
-            ##is_converged = self._GetSolver().SolveSolutionStep()
-            ##self.__CheckIfSolveSolutionStepReturnsAValue(is_converged)
-            #self.FinalizeSolutionStep()
-            #self.OutputSolutionStep()
+    def RunSolutionLoop(self):
+        """This function executes the solution loop of the AnalysisStage
+        It can be overridden by derived classes
+        """
+        while self.KeepAdvancingSolutionLoop():
+            self.time = self._GetSolver().AdvanceInTime(self.time)
+            self.InitializeSolutionStep()
+            #self._GetSolver().Predict()
+            #is_converged = self._GetSolver().SolveSolutionStep()
+            #self.__CheckIfSolveSolutionStepReturnsAValue(is_converged)
+            self.FinalizeSolutionStep()
+            self.OutputSolutionStep()
 
     def FinalizeSolutionStep(self):
         super(FluidChimeraAnalysis,self).FinalizeSolutionStep()
