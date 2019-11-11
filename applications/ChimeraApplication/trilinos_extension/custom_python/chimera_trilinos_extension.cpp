@@ -21,7 +21,7 @@
 namespace Kratos {
 namespace Python {
 
-PYBIND11_MODULE(KratosFluidDynamicsTrilinosExtension,m)
+PYBIND11_MODULE(KratosChimeraTrilinosExtension,m)
 {
     AddTrilinosProcessesToPython(m);
     AddTrilinosSchemesToPython(m);

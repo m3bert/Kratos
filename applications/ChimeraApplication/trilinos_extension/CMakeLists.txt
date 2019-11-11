@@ -23,7 +23,7 @@ if(USE_COTIRE MATCHES ON)
   set_target_properties(KratosChimeraTrilinosExtension PROPERTIES COTIRE_UNITY_LINK_LIBRARIES_INIT "COPY_UNITY")
   cotire(KratosChimeraTrilinosExtension)
 endif(USE_COTIRE MATCHES ON)
-target_link_libraries( KratosChimeraTrilinosExtension PRIVATE KratosChimeraCore KratosTrilinosCore KratosMPICore ${TRILINOS_LIBRARIES})
+target_link_libraries( KratosChimeraTrilinosExtension PRIVATE KratosChimeraApplicationCore KratosTrilinosCore KratosMPICore ${TRILINOS_LIBRARIES})
 set_target_properties( KratosChimeraTrilinosExtension PROPERTIES PREFIX "")
 
 ###############################################################################
@@ -39,8 +39,8 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 ###############################################################################
 ## installing the resulting libraries
-install(TARGETS KratosChimeraTrilinosExtension DESTINATION ${CMAKE_INSTALL_PREFIX}/libs )
+install(TARGETS KratosChimeraTrilinosExtension DESTINATION libs )
 
 ###############################################################################
 ## install python module
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/TrilinosExtension.py" DESTINATION "${CMAKE_INSTALL_PREFIX}/KratosMultiphysics/ChimeraApplication")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/TrilinosExtension.py" DESTINATION "KratosMultiphysics/ChimeraApplication")
