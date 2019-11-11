@@ -6,6 +6,7 @@ import KratosMultiphysics.ChimeraApplication as KratosChimera
 # Import applications
 import KratosMultiphysics.FluidDynamicsApplication as KratosCFD
 import KratosMultiphysics.TrilinosApplication as KratosTrilinos     # MPI solvers
+from KratosMultiphysics.ChimeraApplication import TrilinosExtension as TrilinosChimera
 from KratosMultiphysics.FluidDynamicsApplication import TrilinosExtension as TrilinosFluid
 
 # Import base class file
