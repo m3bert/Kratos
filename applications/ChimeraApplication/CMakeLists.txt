@@ -87,3 +87,11 @@ install(TARGETS KratosChimeraApplication DESTINATION libs )
 
 # Add to the KratosMultiphisics Python module
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/ChimeraApplication.py" DESTINATION "KratosMultiphysics/ChimeraApplication" RENAME "__init__.py")
+
+###############################################################################
+## If trilinos is avaliable, switch on the Fluid trilinos extension
+
+if((${MPI_NEEDED} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON))
+  message("Enabling trilinos extension for KratosChimeraApplication")
+  add_subdirectory(trilinos_extension)
+endif((${MPI_NEEDED} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON) )
