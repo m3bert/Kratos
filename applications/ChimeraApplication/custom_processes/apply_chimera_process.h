@@ -241,6 +241,7 @@ protected:
                                     "model_part_name":"PLEASE_SPECIFY",
                                     "search_model_part_name":"PLEASE_SPECIFY",
                                     "boundary_model_part_name":"PLEASE_SPECIFY",
+                                    "input_filename":"PLEASE_SPECIFY",
                                     "overlap_distance":0.0
                                 }
         )");
