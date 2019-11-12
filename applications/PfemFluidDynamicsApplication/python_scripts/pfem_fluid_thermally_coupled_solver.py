@@ -232,13 +232,13 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         # We set the mesh velocity equal to the node one
         if self.domain_size == 2:
             for node in self.fluid_solver.main_model_part.Nodes:
-                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_X, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_X))
-                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Y, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Y))
+                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_X, 0, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_X,0))
+                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Y, 0, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Y,0))
         else:
             for node in self.fluid_solver.main_model_part.Nodes:
-                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_X, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_X))
-                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Y, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Y))
-                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Z, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Z))
+                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_X, 0, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_X,0))
+                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Y, 0, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Y,0))
+                node.SetSolutionStepValue(KratosMultiphysics.MESH_VELOCITY_Z, 0, node.GetSolutionStepValue(KratosMultiphysics.VELOCITY_Z,0))
                         
     def AuxiliarCallsBeforeRemesh(self):
         """ This method is executed right before execute the remesh
