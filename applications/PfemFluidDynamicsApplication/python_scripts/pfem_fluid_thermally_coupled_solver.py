@@ -284,9 +284,13 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         """
 
         # We copy the nodes
-        for node in self.fluid_solver.GetComputingModelPart().Nodes:
-            self.thermal_solver.GetComputingModelPart().AddNode(node,0)
+        #for node in self.fluid_solver.GetComputingModelPart().Nodes:
+        #    self.thermal_solver.GetComputingModelPart().AddNode(node,0)
 
+        for node in self.fluid_solver.main_model_part.Nodes:
+            self.thermal_solver.main_model_part.AddNode(node,0)
+        KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
+            
         # We create new elements (TODO: the number of the property should be detected automatically)
         for elem in self.fluid_solver.GetComputingModelPart().Elements:
             node_ids = []
