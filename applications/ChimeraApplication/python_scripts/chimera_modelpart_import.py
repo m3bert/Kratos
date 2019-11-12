@@ -6,7 +6,7 @@ import time
 import json
 from copy import deepcopy
 
-def ImportChimeraModelparts(main_modelpart, new_mp_file_names, parallel_type="OpenMP"):
+def ImportChimeraModelparts(main_modelpart, new_mp_file_names, material_file="", parallel_type="OpenMP"):
     '''
         This function extends and specifies the functionalies of the
         mpda_manipulator from: https://github.com/philbucher/mdpa-manipulator
@@ -16,7 +16,7 @@ def ImportChimeraModelparts(main_modelpart, new_mp_file_names, parallel_type="Op
     '''
     if parallel_type == "OpenMP":
         for mdpa_file_name in new_mp_file_names:
-            model_part = ReadModelPart(mdpa_file_name, "new_modelpart")
+            model_part = ReadModelPart(mdpa_file_name, "new_modelpart", material_file)
             AddModelPart(main_modelpart, model_part)
     elif(parallel_type == "MPI"):
         import KratosMultiphysics
@@ -29,19 +29,24 @@ def ImportChimeraModelparts(main_modelpart, new_mp_file_names, parallel_type="Op
         }""")
 
         for mdpa_file_name in new_mp_file_names:
-            if mdpa_file_name.endswith('.mdpa'):
-                mdpa_file_name = mdpa_file_name[:-5]
-            input_settings["model_import_settings"]["input_filename"].SetString(mdpa_file_name)
             model = KratosMultiphysics.Model()
             model_part = model.CreateModelPart("new_modelpart")
             model_part.AddNodalSolutionStepVariable(KratosMultiphysics.PARTITION_INDEX)
+            if mdpa_file_name.endswith('.mdpa'):
+                mdpa_file_name = mdpa_file_name[:-5]
+            input_settings["model_import_settings"]["input_filename"].SetString(mdpa_file_name)
 
             from KratosMultiphysics.mpi import distributed_import_model_part_utility
 
             mpi_import_utility = distributed_import_model_part_utility.DistributedImportModelPartUtility(model_part, input_settings)
             mpi_import_utility.ImportModelPart()
-            mpi_import_utility.CreateCommunicators()
-            AddModelPart(main_modelpart, model_part)
+            #mpi_import_utility.CreateCommunicators()
+            AddModelPart(main_modelpart, model_part, is_mpi=True)
+
+            ## Construct and execute the Parallel fill communicator (also sets the MPICommunicator)
+            import KratosMultiphysics.mpi as KratosMPI
+            ParallelFillCommunicator = KratosMPI.ParallelFillCommunicator(main_modelpart.GetRootModelPart())
+            ParallelFillCommunicator.Execute()
 
 
 def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
@@ -68,7 +73,7 @@ def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
 
 def AddModelPart(model_part_1,
                  model_part_2,
-                 add_as_submodelpart=False):
+                 add_as_submodelpart=False, is_mpi=True):
     '''
     Adding the model_part_2 to model_part_1 (appending)
     '''
@@ -85,8 +90,12 @@ def AddModelPart(model_part_1,
     num_conditions_self = model_part_1.NumberOfConditions()
     total_num_conditions_self = comm.SumAll(num_conditions_self)
 
+    node_id_pi_map ={}
+
     for node in model_part_2.Nodes:
         node.Id += total_num_nodes_self
+        if(is_mpi):
+            node_id_pi_map[node.Id] = node.GetSolutionStepValue(KratosMultiphysics.PARTITION_INDEX)
     for element in model_part_2.Elements:
         element.Id += total_num_elements_self
     for condition in model_part_2.Conditions:
@@ -94,6 +103,11 @@ def AddModelPart(model_part_1,
 
     KratosMultiphysics.FastTransferBetweenModelPartsProcess(model_part_1, model_part_2,
         KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ALL).Execute()
+
+    if(is_mpi):
+        for node_id, pi in node_id_pi_map.items():
+            node = model_part_1.Nodes[node_id]
+            node.SetSolutionStepValue(KratosMultiphysics.PARTITION_INDEX, pi)
 
     if add_as_submodelpart: # add one one lovel lower
         # adding model_part_2 as submodel part to model_part_1 (called recursively)
