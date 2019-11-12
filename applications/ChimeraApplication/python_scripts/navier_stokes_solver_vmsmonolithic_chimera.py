@@ -14,8 +14,9 @@ def CreateSolver(main_model_part, custom_settings):
 
 class NavierStokesSolverMonolithicChimera(NavierStokesSolverMonolithic):
     def __init__(self, model, custom_settings):
+        self.chimera_settings = custom_settings["chimera_settings"].Clone()
+        custom_settings.RemoveValue("chimera_settings")
         super(NavierStokesSolverMonolithicChimera,self).__init__(model,custom_settings)
-
         KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", "Construction of NavierStokesSolverMonolithic finished.")
 
     def AddVariables(self):
@@ -26,18 +27,19 @@ class NavierStokesSolverMonolithicChimera(NavierStokesSolverMonolithic):
 
         KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", "Fluid solver variables added correctly.")
 
-
     def ImportModelPart(self):
         if(self.settings["model_import_settings"]["input_type"].GetString() == "chimera"):
             chimera_mp_file_names = []
-            for chimera_part_levels in self.settings["chimera_settings"]["chimera_parts"]:
+            for chimera_part_levels in self.chimera_settings["chimera_parts"]:
                 for chimera_part_settings in chimera_part_levels:
                     chimera_mp_file_names.append( chimera_part_settings["input_filename"].GetString() )
 
-            KratosChimera.chimera_modelpart_import as chim_mp_imp
-            chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_file_names, parallel_type="OpenMP")
+            material_file_name = self.settings["material_import_settings"]["materials_filename"].GetString()
+            import KratosMultiphysics.ChimeraApplication.chimera_modelpart_import as chim_mp_imp
+            chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_file_names, material_file=material_file_name, parallel_type="OpenMP")
+            KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", " Import of all chimera modelparts completed.")
         else:# we can use the default implementation in the base class
-            super(NavierStokesSolverMonolithicChimera,self)._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
+            super(NavierStokesSolverMonolithicChimera,self).ImportModelPart()
 
     def Initialize(self):
 
