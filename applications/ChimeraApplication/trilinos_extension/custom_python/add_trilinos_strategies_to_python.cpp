@@ -41,39 +41,17 @@ void AddTrilinosStrategiesToPython(pybind11::module& m)
     typedef TrilinosSpace<Epetra_FECrsMatrix, Epetra_FEVector> TrilinosSparseSpaceType;
     typedef UblasSpace<double, Matrix, Vector> TrilinosLocalSpaceType;
     typedef LinearSolver<TrilinosSparseSpaceType, TrilinosLocalSpaceType > TrilinosLinearSolverType;
-    typedef BuilderAndSolver< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType > TrilinosChimeraResidualBasedBuilderAndSolverType;
+    typedef BuilderAndSolver< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType > TrilinosBaseBuilderAndSolverType;
+    typedef TrilinosChimeraBlockBuilderAndSolver< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType > TrilinosChimeraResidualBasedBuilderAndSolverType;
 
     using TrilinosBaseSolvingStrategy = SolvingStrategy< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType >;
     using BaseSolverSettings = SolverSettings<TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType>;
 
-
-    // Builder and solver base class
-    py::class_< TrilinosChimeraResidualBasedBuilderAndSolverType, typename TrilinosChimeraResidualBasedBuilderAndSolverType::Pointer >(m, "TrilinosChimeraBlockBuilderAndSolver")
-    .def(py::init<TrilinosLinearSolverType::Pointer> () )
-    .def( "SetCalculateReactionsFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetCalculateReactionsFlag )
-    .def( "GetCalculateReactionsFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetCalculateReactionsFlag )
-    .def( "SetDofSetIsInitializedFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetDofSetIsInitializedFlag )
-    .def( "GetDofSetIsInitializedFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetDofSetIsInitializedFlag )
-    .def( "SetReshapeMatrixFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetReshapeMatrixFlag )
-    .def( "GetReshapeMatrixFlag", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetReshapeMatrixFlag )
-    .def( "GetEquationSystemSize", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetEquationSystemSize )
-    .def( "BuildLHS", &TrilinosChimeraResidualBasedBuilderAndSolverType::BuildLHS )
-    .def( "BuildRHS", &TrilinosChimeraResidualBasedBuilderAndSolverType::BuildRHS )
-    .def( "Build", &TrilinosChimeraResidualBasedBuilderAndSolverType::Build )
-    .def( "SystemSolve", &TrilinosChimeraResidualBasedBuilderAndSolverType::SystemSolve )
-    .def( "BuildAndSolve", &TrilinosChimeraResidualBasedBuilderAndSolverType::BuildAndSolve )
-    .def( "BuildRHSAndSolve", &TrilinosChimeraResidualBasedBuilderAndSolverType::BuildRHSAndSolve )
-    .def( "ApplyDirichletConditions", &TrilinosChimeraResidualBasedBuilderAndSolverType::ApplyDirichletConditions )
-    .def( "SetUpDofSet", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetUpDofSet )
-    .def( "GetDofSet", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetDofSet, py::return_value_policy::reference_internal )
-    .def( "SetUpSystem", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetUpSystem )
-    .def( "ResizeAndInitializeVectors", &TrilinosChimeraResidualBasedBuilderAndSolverType::ResizeAndInitializeVectors )
-    .def( "InitializeSolutionStep", &TrilinosChimeraResidualBasedBuilderAndSolverType::InitializeSolutionStep )
-    .def( "FinalizeSolutionStep", &TrilinosChimeraResidualBasedBuilderAndSolverType::FinalizeSolutionStep )
-    .def( "CalculateReactions", &TrilinosChimeraResidualBasedBuilderAndSolverType::CalculateReactions )
-    .def( "Clear", &TrilinosChimeraResidualBasedBuilderAndSolverType::Clear )
-    .def( "SetEchoLevel", &TrilinosChimeraResidualBasedBuilderAndSolverType::SetEchoLevel )
-    .def( "GetEchoLevel", &TrilinosChimeraResidualBasedBuilderAndSolverType::GetEchoLevel )
+    py::class_<
+        TrilinosChimeraResidualBasedBuilderAndSolverType,
+        typename TrilinosChimeraResidualBasedBuilderAndSolverType::Pointer,
+        TrilinosBaseBuilderAndSolverType  >
+    (m, "TrilinosChimeraResidualBasedBuilderAndSolver").def(py::init<Epetra_MpiComm&, int, TrilinosLinearSolverType::Pointer > () )
     ;
 
 }

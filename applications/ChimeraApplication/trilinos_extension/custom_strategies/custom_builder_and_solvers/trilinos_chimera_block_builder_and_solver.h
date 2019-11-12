@@ -934,7 +934,7 @@ protected:
 private:
     ///@name Static Member Variables
     ///@{
-    TSystemMatrixType mL;
+    // TSystemMatrixType mL;
 
     ///@}
     ///@name Member Variables
