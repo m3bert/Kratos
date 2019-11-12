@@ -292,15 +292,18 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
             
         # We create new elements (TODO: the number of the property should be detected automatically)
-        for elem in self.fluid_solver.GetComputingModelPart().Elements:
+        for elem in self.fluid_solver.main_model_part.Elements:#GetComputingModelPart().Elements:
             node_ids = []
             if self.domain_size == 2:
-                node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id]                    
-                self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff2D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
+                if len(elem.GetNodes())==3:
+                    node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id]                    
+                    #self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff2D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
+                    self.thermal_solver.main_model_part.CreateNewElement("EulerianConvDiff2D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
             else:
                 node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id, elem.GetNode(3).Id]                    
                 self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff3D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
-      
+        KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ELEMENTS).Execute()
+        
     def PrepareModelPart(self):
         self.fluid_solver.PrepareModelPart()
         self.thermal_solver.PrepareModelPart()
