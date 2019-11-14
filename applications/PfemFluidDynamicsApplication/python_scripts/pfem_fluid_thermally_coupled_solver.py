@@ -211,11 +211,14 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #    print("fluid node: {}".format(node))
         #    if node.Id==27:
         #        print("nodal T_0: {}, nodal T_1: {}".format(node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1)))
+        self.AuxiliarCallsBeforeRemesh()
+        self.AuxiliarCallsAfterRemesh()
         fluid_is_converged = self.fluid_solver.SolveSolutionStep()
         self.UpdateMeshVelocity()
         #for elem in self.thermal_solver.main_model_part.Elements:
         #    print("thermal elem Id: {}, Property: {}".format(elem.Id, elem.Properties))
         thermal_is_converged = self.thermal_solver.SolveSolutionStep()
+        #self.AuxiliarCallsBeforeRemesh()
         return (fluid_is_converged and thermal_is_converged)
 
     def FinalizeSolutionStep(self):

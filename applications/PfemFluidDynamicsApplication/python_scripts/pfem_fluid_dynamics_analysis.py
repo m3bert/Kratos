@@ -174,7 +174,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #print("*****BEFORE REMESH*****")
         #for node in self._solver.fluid_solver.main_model_part.Nodes:
         #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))
-        self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
+        #self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
         
         # processes to be executed at the begining of the solution step
         self.model_processes.ExecuteInitializeSolutionStep()
@@ -184,7 +184,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #    #print("Id: {}, X: {}, Y: {}, T_0: {}, T_1: {}".format(node.Id, node.X, node.Y, node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1)))       
         #    print("Id: {}, T_0: {}, T_1: {}, T_2: {}".format(node.Id, node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,2)))       
         
-        self._solver.AuxiliarCallsAfterRemesh()
+        #self._solver.AuxiliarCallsAfterRemesh()
         
         for process in self._GetListOfProcesses():
             process.ExecuteInitializeSolutionStep()
