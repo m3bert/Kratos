@@ -211,13 +211,19 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #    print("fluid node: {}".format(node))
         #    if node.Id==27:
         #        print("nodal T_0: {}, nodal T_1: {}".format(node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1)))
-        self.AuxiliarCallsBeforeRemesh()
-        self.AuxiliarCallsAfterRemesh()
+        #self.AuxiliarCallsBeforeRemesh()
+        #self.AuxiliarCallsAfterRemesh()
         fluid_is_converged = self.fluid_solver.SolveSolutionStep()
-        self.UpdateMeshVelocity()
+        self.AuxiliarCallsBeforeRemesh()
+        self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
+        self.UpdateThermalNodes()
+        self.AuxiliarCallsAfterRemesh()
+        print("fluid nodes number: {}, thermal nodes number: {}".format(len(self.fluid_solver.main_model_part.GetNodes()), len(self.thermal_solver.main_model_part.GetNodes())))
+        #self.UpdateMeshVelocity()
         #for elem in self.thermal_solver.main_model_part.Elements:
         #    print("thermal elem Id: {}, Property: {}".format(elem.Id, elem.Properties))
         thermal_is_converged = self.thermal_solver.SolveSolutionStep()
+        #print(self.model)
         #self.AuxiliarCallsBeforeRemesh()
         return (fluid_is_converged and thermal_is_converged)
 
@@ -255,16 +261,16 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
         #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.GetComputingModelPart().Elements)
         
-        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Nodes)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Nodes)
         #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
         KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Elements)
         
         #self.thermal_solver.main_model_part.RemoveNodes(KratosMultiphysics.TO_ERASE)
         #self.thermal_solver.main_model_part.RemoveElements(KratosMultiphysics.TO_ERASE)
         
-        self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
+        #self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
         self.thermal_solver.main_model_part.RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        
+        #self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
         #self.thermal_solver.GetComputingModelPart().RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
         #self.thermal_solver.GetComputingModelPart().RemoveConditionsFromAllLevels(KratosMultiphysics.TO_ERASE)
         #self.thermal_solver.GetComputingModelPart().RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
@@ -276,8 +282,8 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #self.thermal_solver.main_model_part.CreateSubModelPart("thermal_computing_domain")
         
         # We want to avoid the removal of the fluid nodes in the next remesh process
-        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Nodes)
-        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Elements)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Nodes)
+        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Elements)
         
     def AuxiliarCallsAfterRemesh(self):
         """ This method is executed right after execute the remesh
@@ -285,14 +291,14 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         Keyword arguments:
         self -- It signifies an instance of a class.
         """
-
+        #self.UpdateThermalNodes()
         # We copy the nodes
         #for node in self.fluid_solver.GetComputingModelPart().Nodes:
         #    self.thermal_solver.GetComputingModelPart().AddNode(node,0)
 
-        for node in self.fluid_solver.main_model_part.Nodes:
-            self.thermal_solver.main_model_part.AddNode(node,0)
-        KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
+        #for node in self.fluid_solver.main_model_part.Nodes:
+        #    self.thermal_solver.main_model_part.AddNode(node,0)
+        #KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
             
         # We create new elements (TODO: the number of the property should be detected automatically)
         for elem in self.fluid_solver.main_model_part.Elements:#GetComputingModelPart().Elements:
@@ -310,4 +316,15 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
     def PrepareModelPart(self):
         self.fluid_solver.PrepareModelPart()
         self.thermal_solver.PrepareModelPart()
-    
+
+    def UpdateThermalNodes(self):
+        for FluidNode in self.fluid_solver.main_model_part.Nodes:
+            #node_id = FluidNode.Id
+            ThereIsNode = False
+            for ThermalNode in self.thermal_solver.main_model_part.Nodes:
+                if ThermalNode.Id == FluidNode.Id: 
+                    ThereIsNode = True
+            if not ThereIsNode:
+                self.thermal_solver.main_model_part.AddNode(FluidNode,0)
+        KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
+        
