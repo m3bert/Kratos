@@ -232,6 +232,7 @@ class PfemFluidSolver(PythonSolver):
             node.AddDof(KratosMultiphysics.DISPLACEMENT_X)
             node.AddDof(KratosMultiphysics.DISPLACEMENT_Y)
             node.AddDof(KratosMultiphysics.DISPLACEMENT_Z)
+            node.AddDof(KratosMultiphysics.TEMPERATURE)
         print("::[Pfem Fluid Solver]:: DOF's ADDED")
 
     def ImportModelPart(self):
