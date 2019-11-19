@@ -27,7 +27,10 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
         super(TrilinosNavierStokesSolverMonolithic,self).AddVariables()
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.DISTANCE)
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.FLAG_VARIABLE)
-        self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.DISPLACEMENT)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATIONAL_ANGLE)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATIONAL_VELOCITY)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATION_MESH_DISPLACEMENT)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATION_MESH_VELOCITY)
 
         KratosMultiphysics.Logger.PrintInfo("TrilinosNavierStokesSolverMonolithic", "Fluid solver variables added correctly.")
 
@@ -44,9 +47,6 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
             KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", " Import of all chimera modelparts completed.")
         else:# we can use the default implementation in the base class
             super(TrilinosNavierStokesSolverMonolithic,self).ImportModelPart()
-
-        print(self.main_model_part)
-
     def Initialize(self):
 
         ## Construct the communicator
@@ -139,7 +139,7 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
             raise NotImplementedError
         else:
             # TODO: This should be trilinos version
-            self.builder_and_solver = KratosTrilinos.TrilinosBlockBuilderAndSolver(self.EpetraCommunicator,
+            self.builder_and_solver = TrilinosChimera.TrilinosChimeraResidualBasedBuilderAndSolver(self.EpetraCommunicator,
                                                                                    guess_row_size,
                                                                                    self.trilinos_linear_solver)
         ## Construct the Trilinos Newton-Raphson strategy

@@ -506,7 +506,7 @@ void ModelPartIO::ReadModelPart(ModelPart & rThisModelPart)
             ReadSubModelPartBlock(rThisModelPart, rThisModelPart);
         }
     }
-    KRATOS_INFO("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
     Timer::Stop("Reading Input");
     KRATOS_CATCH("")
 }
@@ -534,7 +534,7 @@ void ModelPartIO::WriteModelPart(ModelPart & rThisModelPart)
 //     WriteMeshBlock(rThisModelPart); // TODO: FINISH ME
     WriteSubModelPartBlock(rThisModelPart, "");
 
-    KRATOS_INFO("ModelPartIO") << "  [Total Lines Wrote : " << mNumberOfLines<<"]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Total Lines Wrote : " << mNumberOfLines<<"]" << std::endl;
 
     Timer::Stop("Writing Output");
 }
@@ -671,7 +671,7 @@ void ModelPartIO::DivideInputToPartitions(SizeType NumberOfPartitions, GraphType
     WritePartitionIndices(output_files, NodesPartitions, NodesAllPartitions);
 
     WriteCommunicatorData(output_files, NumberOfPartitions, DomainsColoredGraph, NodesPartitions, ElementsPartitions, ConditionsPartitions, NodesAllPartitions, ElementsAllPartitions, ConditionsAllPartitions);
-    KRATOS_INFO("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
 
     for(SizeType i = 0 ; i < NumberOfPartitions ; i++)
         delete output_files[i];
@@ -732,7 +732,7 @@ void ModelPartIO::DivideInputToPartitions(
     WritePartitionIndices(output_files, NodesPartitions, NodesAllPartitions);
 
     WriteCommunicatorData(output_files, NumberOfPartitions, DomainsColoredGraph, NodesPartitions, ElementsPartitions, ConditionsPartitions, NodesAllPartitions, ElementsAllPartitions, ConditionsAllPartitions);
-    KRATOS_INFO("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Total Lines Read : " << mNumberOfLines<<"]" << std::endl;
 
     // for(SizeType i = 0 ; i < NumberOfPartitions ; i++)
     //     delete output_files[i];
@@ -1077,7 +1077,7 @@ void ModelPartIO::ReadNodesBlock(NodesContainerType& rThisNodes)
 
     SizeType number_of_nodes_read = 0;
 
-    KRATOS_INFO("ModelPartIO") << "  [Reading Nodes    : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Nodes    : ";
 
     while(!mpStream->eof())
     {
@@ -1100,7 +1100,7 @@ void ModelPartIO::ReadNodesBlock(NodesContainerType& rThisNodes)
         rThisNodes.push_back(temp_node);
         number_of_nodes_read++;
     }
-    KRATOS_INFO("") << number_of_nodes_read << " nodes read]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_nodes_read << " nodes read]" << std::endl;
 
     unsigned int numer_of_nodes_read = rThisNodes.size();
     rThisNodes.Unique();
@@ -1127,7 +1127,7 @@ NodeType temp_node;
 
     SizeType number_of_nodes_read = 0;
 
-    KRATOS_INFO("ModelPartIO") << "  [Reading Nodes    : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Nodes    : ";
 
     while(!mpStream->eof())
     {
@@ -1152,7 +1152,7 @@ NodeType temp_node;
         rModelPart.Nodes().push_back(temp_node);
         number_of_nodes_read++;
     }
-    KRATOS_INFO("") << number_of_nodes_read << " nodes read]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_nodes_read << " nodes read]" << std::endl;
 
     unsigned int numer_of_nodes_read = rModelPart.Nodes().size();
     rModelPart.Nodes().Unique();
@@ -1171,7 +1171,7 @@ NodeType temp_node;
     typedef std::map< unsigned int, array_1d<double,3> > map_type;
     map_type read_coordinates;
 
-    KRATOS_INFO("ModelPartIO") << "  [Reading Nodes    : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Nodes    : ";
 
     while(!mpStream->eof())
     {
@@ -1220,7 +1220,7 @@ NodeType temp_node;
         }
     }
 
-    KRATOS_INFO("") << number_of_nodes_read << " nodes read]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_nodes_read << " nodes read]" << std::endl;
     KRATOS_WARNING_IF("ModelPartIO", rModelPart.Nodes().size() - old_size != number_of_nodes_read) << "attention! we read " << number_of_nodes_read << " but there are only " << rModelPart.Nodes().size() - old_size<< " non repeated nodes" << std::endl;
 
     KRATOS_CATCH("")
@@ -1238,7 +1238,7 @@ std::size_t ModelPartIO::CountNodesInBlock()
 
     SizeType number_of_nodes_read = 0;
 
-//KRATOS_INFO("ModelPartIO") << "  [Reading Nodes    : ";
+//KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Nodes    : ";
 
     while(!mpStream->eof())
     {
@@ -1255,7 +1255,7 @@ std::size_t ModelPartIO::CountNodesInBlock()
 
         number_of_nodes_read++;
     }
-    //KRATOS_INFO("") << number_of_nodes_read << " nodes read]" << std::endl;
+    //KRATOS_INFO_ALL_RANKS("") << number_of_nodes_read << " nodes read]" << std::endl;
 
     // Error check: look for duplicate nodes
     std::sort(found_ids.begin(),found_ids.end());
@@ -1388,7 +1388,7 @@ void ModelPartIO::ReadElementsBlock(ModelPart& rModelPart)
     std::string element_name;
 
     ReadWord(element_name);
-    KRATOS_INFO("ModelPartIO") << "  [Reading Elements : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Elements : ";
 
     if(!KratosComponents<Element>::Has(element_name))
     {
@@ -1427,7 +1427,7 @@ void ModelPartIO::ReadElementsBlock(ModelPart& rModelPart)
         number_of_read_elements++;
 
     }
-    KRATOS_INFO("") << number_of_read_elements << " elements read] [Type: " <<element_name << "]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_read_elements << " elements read] [Type: " <<element_name << "]" << std::endl;
     aux_elements.Unique();
 
     rModelPart.AddElements(aux_elements.begin(), aux_elements.end());
@@ -1449,7 +1449,7 @@ void ModelPartIO::ReadElementsBlock(NodesContainerType& rThisNodes, PropertiesCo
     std::string element_name;
 
     ReadWord(element_name);
-    KRATOS_INFO("ModelPartIO") << "  [Reading Elements : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Elements : ";
 
     if(!KratosComponents<Element>::Has(element_name))
     {
@@ -1488,7 +1488,7 @@ void ModelPartIO::ReadElementsBlock(NodesContainerType& rThisNodes, PropertiesCo
         number_of_read_elements++;
 
     }
-    KRATOS_INFO("") << number_of_read_elements << " elements read] [Type: " <<element_name << "]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_read_elements << " elements read] [Type: " <<element_name << "]" << std::endl;
     rThisElements.Unique();
 
     KRATOS_CATCH("")
@@ -1513,7 +1513,7 @@ void ModelPartIO::ReadConditionsBlock(NodesContainerType& rThisNodes, Properties
     std::string condition_name;
 
     ReadWord(condition_name);
-    KRATOS_INFO("ModelPartIO") << "  [Reading Conditions : ";
+    KRATOS_INFO_ALL_RANKS("ModelPartIO") << "  [Reading Conditions : ";
 
     if(!KratosComponents<Condition>::Has(condition_name))
     {
@@ -1550,7 +1550,7 @@ void ModelPartIO::ReadConditionsBlock(NodesContainerType& rThisNodes, Properties
         rThisConditions.push_back(r_clone_condition.Create(ReorderedConditionId(id), temp_condition_nodes, p_temp_properties));
         number_of_read_conditions++;
     }
-    KRATOS_INFO("") << number_of_read_conditions << " conditions read] [Type: " << condition_name << "]" << std::endl;
+    KRATOS_INFO_ALL_RANKS("") << number_of_read_conditions << " conditions read] [Type: " << condition_name << "]" << std::endl;
     rThisConditions.Unique();
 
     KRATOS_CATCH("")

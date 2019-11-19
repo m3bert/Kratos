@@ -167,10 +167,14 @@ public:
         // Actual execution of the functionality of this class
         if (mReformulateEveryStep || !mIsFormulated)
         {
+            const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
+            const int mpi_rank = r_comm.Rank();
             for(const auto& node_id : mRemoteNodes)
             {
-                mrMainModelPart.RemoveNodeFromAllLevels(node_id);
+                if(mrMainModelPart.GetNode(node_id).FastGetSolutionStepValue(PARTITION_INDEX) != mpi_rank)
+                    mrMainModelPart.RemoveNodeFromAllLevels(node_id);
             }
+            mRemoteNodes.clear();
             DoChimeraLoop();
             mIsFormulated = true;
         }
@@ -181,6 +185,7 @@ public:
     {
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Nodes());
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Elements());
+        VariableUtils().SetFlag(ACTIVE, true, mrMainModelPart.Elements());
         VariableUtils().SetNonHistoricalVariable(SPLIT_ELEMENT, false, mrMainModelPart.Elements());
 
         if (mReformulateEveryStep)
@@ -283,27 +288,23 @@ protected:
                 background_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
                 Model &current_model = mrMainModelPart.GetModel();
                 ModelPart &r_background_model_part = current_model.GetModelPart(background_patch_param["model_part_name"].GetString());
-                if (!r_background_model_part.HasSubModelPart("chimera_boundary_mp"))
-                {
-                    auto &r_boundary_model_part = r_background_model_part.CreateSubModelPart("chimera_boundary_mp");
-                    BuiltinTimer extraction_time;
-                    if (i_current_level == 0)
-                    {
-                        ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_background_model_part, r_boundary_model_part);
-                    }
-                    else
-                    {
-                        ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_background_model_part, r_boundary_model_part, ChimeraHoleCuttingUtility::SideToExtract::INSIDE);
-                    }
-                    KRATOS_INFO_IF("Extraction of boundary mesh took : ", mEchoLevel > 0) << extraction_time.ElapsedSeconds() << " seconds" << std::endl;
-                }
                 // compute the outerboundary of the background to save
+                if (i_current_level == 0)
+                {
+                    if (!r_background_model_part.HasSubModelPart("chimera_boundary_mp"))
+                    {
+                        auto &r_boundary_model_part = r_background_model_part.CreateSubModelPart("chimera_boundary_mp");
+                        BuiltinTimer extraction_time;
+                        ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_background_model_part, r_boundary_model_part);
+                        KRATOS_INFO_IF("Extraction of boundary mesh took : ", mEchoLevel > 0) << extraction_time.ElapsedSeconds() << " seconds" << std::endl;
+                    }
+                }
                 for (IndexType i_slave_level = i_current_level + 1; i_slave_level < mNumberOfLevels; ++i_slave_level)
                 {
                     for (auto &slave_patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
                     {
-                        KRATOS_INFO_IF("Formulating Chimera for the combination :: ", mEchoLevel > 0) << "Background" << background_patch_param << "\n Patch::" << slave_patch_param << std::endl;
                         slave_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
+                        KRATOS_INFO_IF("Formulating Chimera for the combination :: ", mEchoLevel > 0) << "Background" << background_patch_param << "\n Patch::" << slave_patch_param << std::endl;
                         if (i_current_level == 0) // a check to identify computational Domain boundary
                             domain_type = ChimeraHoleCuttingUtility::Domain::OTHER;
                         FormulateChimera(background_patch_param, slave_patch_param, domain_type);
@@ -336,6 +337,8 @@ protected:
         ModelPart &r_background_model_part = current_model.GetModelPart(BackgroundParam["model_part_name"].GetString());
         ModelPart &r_background_boundary_model_part = r_background_model_part.GetSubModelPart("chimera_boundary_mp");
         ModelPart &r_patch_model_part = current_model.GetModelPart(PatchParameters["model_part_name"].GetString());
+        // KRATOS_INFO_IF("CHECK : ", mEchoLevel > 0) << r_patch_model_part << std::endl;
+        // KRATOS_INFO_IF("CHECK : ", mEchoLevel > 0) << r_background_model_part << std::endl;
         const std::string bg_search_mp_name = BackgroundParam["search_model_part_name"].GetString();
         auto &r_background_search_model_part = current_model.HasModelPart(bg_search_mp_name) ? current_model.GetModelPart(bg_search_mp_name) : r_background_model_part;
 
@@ -352,7 +355,10 @@ protected:
         KRATOS_ERROR_IF(over_lap_distance < 1e-12) << "Overlap distance should be a positive and non-zero number." << std::endl;
 
         ModelPart &r_hole_model_part = current_model.CreateModelPart("HoleModelpart");
+        r_hole_model_part.GetProcessInfo().GetValue(STEP) = mrMainModelPart.GetProcessInfo().GetValue(STEP);
         ModelPart &r_hole_boundary_model_part = current_model.CreateModelPart("HoleBoundaryModelPart");
+        r_hole_boundary_model_part.GetProcessInfo().GetValue(STEP) = mrMainModelPart.GetProcessInfo().GetValue(STEP);
+
 
         auto &r_modified_patch_boundary_model_part = ExtractPatchBoundary(PatchParameters, r_background_boundary_model_part, DomainType);
 
@@ -370,8 +376,10 @@ protected:
         KRATOS_INFO_IF("Hole creation took : ", mEchoLevel > 0) << hole_creation_time_elapsed << " seconds" << std::endl;
 
         // WriteModelPart(r_hole_model_part);
+        // WriteModelPart(r_background_model_part);
         // WriteModelPart(r_modified_patch_boundary_model_part);
-        // WriteModelPart(r_background_boundary_model_part);
+        // WriteModelPart(r_hole_boundary_model_part);
+        // WriteModelPart(r_background_model_part);
 
         const int n_elements = static_cast<int>(r_hole_model_part.NumberOfElements());
 #pragma omp parallel for
@@ -561,7 +569,7 @@ protected:
     }
 
     /**
-     * @brief Loops over the nodes of the given modelpart and uses the binlocater to locate them on a 
+     * @brief Loops over the nodes of the given modelpart and uses the binlocater to locate them on a
      *          element and formulates respecive constraints
      * @param rModelPart The modelpart whos nodes are to be found.
      * @param rBinLocator The bin based locator formulated on the background. This is used to locate nodes on rBoundaryModelPart.
@@ -571,12 +579,17 @@ protected:
     void FormulateConstraints(ModelPart &rModelPart, PointLocatorType &rBinLocator, MasterSlaveContainerVectorType &rVelocityMasterSlaveContainerVector,
                               MasterSlaveContainerVectorType &rPressureMasterSlaveContainerVector)
     {
-        // KRATOS_INFO_IF_ALL_RANKS("FormulateConstraints 1 ", true)<<" "<<std::endl;
+        const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
+        const int mpi_rank = r_comm.Rank();
+        Model &current_model = mrMainModelPart.GetModel();
+        auto& gathered_modelpart = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredBoundary") : rModelPart;
+        DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rModelPart, gathered_modelpart);
         std::vector<int> vector_of_non_found_nodes;
-        const int n_boundary_nodes = static_cast<int>(rModelPart.Nodes().size());
+        const int n_boundary_nodes = static_cast<int>(gathered_modelpart.Nodes().size());
         std::vector<int> constraints_id_vector;
-        int num_constraints_required = (TDim + 1) * (rModelPart.Nodes().size());
+        int num_constraints_required = (TDim + 1) * (gathered_modelpart.Nodes().size());
         CreateConstraintIds(constraints_id_vector, num_constraints_required);
+        auto& r_nodes = mrMainModelPart.Nodes();
 
         IndexType counter = 0;
         IndexType not_found_counter = 0;
@@ -588,14 +601,22 @@ protected:
             auto &ms_velocity_container = rVelocityMasterSlaveContainerVector[omp_get_thread_num()];
             auto &ms_pressure_container = rPressureMasterSlaveContainerVector[omp_get_thread_num()];
 
-            ModelPart::NodesContainerType::iterator i_boundary_node = rModelPart.NodesBegin() + i_bn;
+            ModelPart::NodesContainerType::iterator i_boundary_node = gathered_modelpart.NodesBegin() + i_bn;
             NodeType::Pointer p_boundary_node = *(i_boundary_node.base());
             unsigned int start_constraint_id = i_bn * (TDim + 1) * (TDim + 1);
             bool is_found = SearchNodeAndMakeConstraints(*p_boundary_node, rBinLocator, ms_velocity_container, ms_pressure_container,
                                                          constraints_id_vector, start_constraint_id);
             if (is_found)
             {
-                counter += 1;
+                auto p_index = p_boundary_node->FastGetSolutionStepValue(PARTITION_INDEX);
+                if( p_index == mpi_rank){
+                    counter += 1;
+                }else{
+                    if(r_nodes.find(p_boundary_node->Id()) == r_nodes.end()){
+                        auto p_node = mrMainModelPart.CreateNewNode(p_boundary_node->Id(), *p_boundary_node);
+                        p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
+                    }
+                }
             }
             else
             {
@@ -603,21 +624,19 @@ protected:
                 vector_of_non_found_nodes.push_back(p_boundary_node->Id());
             }
         }
-        // KRATOS_INFO_IF_ALL_RANKS("FormulateConstraints 2 ", true)<<" "<<std::endl;
 
         // TODO: Once local search is done, do remote search
-        const DataCommunicator &r_comm =
-            mrMainModelPart.GetCommunicator().GetDataCommunicator();
+
         if (r_comm.IsDistributed())
         {
-            auto &ms_velocity_container = rVelocityMasterSlaveContainerVector[0];
-            auto &ms_pressure_container = rPressureMasterSlaveContainerVector[0];
-            DoRemoteSearch(vector_of_non_found_nodes, rBinLocator, ms_velocity_container, ms_pressure_container);
+#ifdef KRATOS_USING_MPI
+        ParallelFillCommunicator(mrMainModelPart).Execute();
+        current_model.DeleteModelPart("GatheredBoundary");
+#endif
         }
-        KRATOS_INFO_IF_ALL_RANKS("FormulateConstraints 3 ", true)<<" "<<std::endl;
-        KRATOS_INFO_IF("Loop over boundary nodes took : ", mEchoLevel > 1) << loop_over_b_nodes.ElapsedSeconds() << " seconds" << std::endl;
-        KRATOS_INFO_IF("Number of Boundary nodes found : ", mEchoLevel > 1) << counter << ". Number of constraints : " << counter * 9 << std::endl;
-        KRATOS_INFO_IF("Number of Boundary nodes not found  : ", mEchoLevel > 1) << not_found_counter << std::endl;
+        KRATOS_INFO_IF_ALL_RANKS("Loop over boundary nodes took : ", mEchoLevel > 1) << loop_over_b_nodes.ElapsedSeconds() << " seconds" << std::endl;
+        KRATOS_INFO_IF_ALL_RANKS("Number of Boundary nodes found : ", mEchoLevel > 1) << counter << ". Number of constraints : " << counter * 9 << std::endl;
+        KRATOS_INFO_IF_ALL_RANKS("Number of Boundary nodes not found  : ", mEchoLevel > 1) << not_found_counter << std::endl;
     }
 
     ///@}
@@ -658,8 +677,8 @@ private:
      */
     ModelPart &ExtractPatchBoundary(const Parameters PatchParameters, ModelPart &rBackgroundBoundaryModelpart, const ChimeraHoleCuttingUtility::Domain DomainType)
     {
-        Model &current_model = rBackgroundBoundaryModelpart.GetModel();
-        const auto &r_comm = rBackgroundBoundaryModelpart.GetCommunicator().GetDataCommunicator();
+        Model &current_model = mrMainModelPart.GetModel();
+        const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         const std::string patch_boundary_mp_name = PatchParameters["boundary_model_part_name"].GetString();
 
         if (!current_model.HasModelPart(patch_boundary_mp_name))
@@ -680,11 +699,15 @@ private:
             r_comm.Max(rem_out_domain_time_elapsed, 0);
             KRATOS_INFO_IF("Removing out of domain patch took : ", mEchoLevel > 0) << rem_out_domain_time_elapsed << " seconds" << std::endl;
 
+            // KRATOS_INFO_IF_ALL_RANKS("ExtractPatchBoundary : ", true)<<r_modified_patch_model_part<<std::endl;
+            // KRATOS_INFO_IF_ALL_RANKS("ExtractPatchBoundary : ", true)<<r_patch_model_part<<std::endl;
             BuiltinTimer patch_boundary_extraction_time;
             ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_modified_patch_model_part, r_modified_patch_boundary_model_part);
             auto patch_boundary_extraction_time_elapsed = patch_boundary_extraction_time.ElapsedSeconds();
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("Extraction of patch boundary took : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
+            //WriteModelPart(rBackgroundBoundaryModelpart);
+            //WriteModelPart(r_modified_patch_model_part);
             current_model.DeleteModelPart("ModifiedPatch");
             return r_modified_patch_boundary_model_part;
         }
@@ -785,7 +808,6 @@ private:
         typedef ModelPart::NodesContainerType NodesContainerType;
         typedef ModelPart::ElementsContainerType ElementsContainerType;
         typedef ModelPart::ConditionsContainerType ConditionsContainerType;
-        // KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 1 ", true)<<" "<<std::endl;
 
         const DataCommunicator &r_comm =
             mrMainModelPart.GetCommunicator().GetDataCommunicator();
@@ -804,8 +826,8 @@ private:
             {
                 auto p_node = mrMainModelPart.pGetNode(node_id);
                 // only send the nodes owned by this partition
-                if (p_node->FastGetSolutionStepValue(PARTITION_INDEX) == mpi_rank)
-                    SendNodes[dest_rank].push_back(p_node);
+                // if (p_node->FastGetSolutionStepValue(PARTITION_INDEX) == mpi_rank)
+                SendNodes[dest_rank].push_back(p_node);
             }
         }
         // KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 2 ", true)<<" "<<std::endl;
@@ -825,22 +847,21 @@ private:
         mRemoteNodes.reserve(number_of_remote_constraints);
         remote_constraints_ids.reserve(number_of_remote_constraints);
         CreateConstraintIds(remote_constraints_ids, number_of_remote_constraints * 3);
-        KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 2 ", true)<<" Number of remote constraint ids : "<<remote_constraints_ids.size()<<std::endl;
 
         int constraint_node_count = 0;
         for (int dest_rank = 0; dest_rank < mpi_size; ++dest_rank)
             if (dest_rank != mpi_rank){
-                KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 3 ", true)<<" Number of received nodes : "<<RecvNodes[dest_rank].size()<<std::endl;
                 for (auto &node : RecvNodes[dest_rank])
                 {
                     bool is_found = SearchNodeAndMakeConstraints(node, rBinLocator, rVelocityMsConstraintsVector, rPressureMsConstraintsVector,
                                                                  remote_constraints_ids, constraint_node_count);
                     if (is_found)
                     {
-                        mrMainModelPart.CreateNewNode(node.Id(), node);
-                        mRemoteNodes.push_back(node.Id());
+                        auto p_node = mrMainModelPart.CreateNewNode(node.Id(), node);
+                        p_node->GetSolutionStepValue(PARTITION_INDEX) = node.FastGetSolutionStepValue(PARTITION_INDEX);
                         //TODO: Id of these nodes should be stored on the main modelpart.
                         //      And these should be deleted in InitializeSolutionStep
+                        mRemoteNodes.push_back(node.Id());
                         constraint_node_count++;
                     }
                 }
@@ -859,9 +880,6 @@ private:
      */
     void WriteModelPart(ModelPart &rModelPart)
     {
-
-        if (rModelPart.NumberOfNodes() <= 0)
-            return;
         Parameters vtk_parameters(R"(
                 {
                     "model_part_name"                    : "HoleModelpart",
@@ -871,7 +889,7 @@ private:
                     "output_precision"                   : 3,
                     "output_sub_model_parts"             : false,
                     "folder_name"                        : "test_vtk_output",
-                    "save_output_files_in_folder"        : true,
+                    "save_output_files_in_folder"        : false,
                     "nodal_solution_step_data_variables" : ["VELOCITY","PRESSURE","DISTANCE"],
                     "nodal_data_value_variables"         : [],
                     "element_flags"                      : ["ACTIVE"],
