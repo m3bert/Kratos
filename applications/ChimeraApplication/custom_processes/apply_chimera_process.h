@@ -387,7 +387,7 @@ protected:
         }
 
         BuiltinTimer mpc_time;
-        ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
+        //ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
         ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took         : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
@@ -695,15 +695,12 @@ private:
             r_comm.Max(rem_out_domain_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Removing out of domain patch took    : ", mEchoLevel > 0) << rem_out_domain_time_elapsed << " seconds" << std::endl;
 
-            // KRATOS_INFO_IF_ALL_RANKS("ExtractPatchBoundary : ", true)<<r_modified_patch_model_part<<std::endl;
-            // KRATOS_INFO_IF_ALL_RANKS("ExtractPatchBoundary : ", true)<<r_patch_model_part<<std::endl;
             BuiltinTimer patch_boundary_extraction_time;
             ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_modified_patch_model_part, r_modified_patch_boundary_model_part);
             auto patch_boundary_extraction_time_elapsed = patch_boundary_extraction_time.ElapsedSeconds();
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took    : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
-            //WriteModelPart(rBackgroundBoundaryModelpart);
-            //WriteModelPart(r_modified_patch_model_part);
+
             current_model.DeleteModelPart("ModifiedPatch");
             return r_modified_patch_boundary_model_part;
         }
@@ -797,78 +794,6 @@ private:
         return is_found;
     }
 
-    void DoRemoteSearch(std::vector<int> &rNodeIdsNotFound, PointLocatorType &rBinLocator,
-                        MasterSlaveConstraintContainerType &rVelocityMsConstraintsVector,
-                        MasterSlaveConstraintContainerType &rPressureMsConstraintsVector)
-    {
-        typedef ModelPart::NodesContainerType NodesContainerType;
-        typedef ModelPart::ElementsContainerType ElementsContainerType;
-        typedef ModelPart::ConditionsContainerType ConditionsContainerType;
-
-        const DataCommunicator &r_comm =
-            mrMainModelPart.GetCommunicator().GetDataCommunicator();
-        const int mpi_size = r_comm.Size();
-        const int mpi_rank = r_comm.Rank();
-
-        // send everything to node with id "gather_rank"
-        // transfer nodes
-        std::vector<NodesContainerType> SendNodes(mpi_size);
-        std::vector<NodesContainerType> RecvNodes(mpi_size);
-
-        for (int dest_rank = 0; dest_rank < mpi_size; ++dest_rank)
-        {
-            SendNodes[dest_rank].reserve(rNodeIdsNotFound.size());
-            for (const auto &node_id : rNodeIdsNotFound)
-            {
-                auto p_node = mrMainModelPart.pGetNode(node_id);
-                // only send the nodes owned by this partition
-                // if (p_node->FastGetSolutionStepValue(PARTITION_INDEX) == mpi_rank)
-                SendNodes[dest_rank].push_back(p_node);
-            }
-        }
-        // KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 2 ", true)<<" "<<std::endl;
-        mrMainModelPart.GetCommunicator().TransferObjects(SendNodes, RecvNodes);
-
-        // Get all the non found nodes from all the ranks
-        // Now search for those non found nodes locally and if found any, add a constraints
-        int number_of_remote_constraints = 0;
-        for (int dest_rank = 0; dest_rank < mpi_size; ++dest_rank)
-        {
-            if (dest_rank != mpi_rank)
-            {
-                number_of_remote_constraints += RecvNodes[dest_rank].size();
-            }
-        }
-        std::vector<int> remote_constraints_ids;
-        mRemoteNodes.reserve(number_of_remote_constraints);
-        remote_constraints_ids.reserve(number_of_remote_constraints);
-        CreateConstraintIds(remote_constraints_ids, number_of_remote_constraints * 3);
-
-        int constraint_node_count = 0;
-        for (int dest_rank = 0; dest_rank < mpi_size; ++dest_rank)
-            if (dest_rank != mpi_rank){
-                for (auto &node : RecvNodes[dest_rank])
-                {
-                    bool is_found = SearchNodeAndMakeConstraints(node, rBinLocator, rVelocityMsConstraintsVector, rPressureMsConstraintsVector,
-                                                                 remote_constraints_ids, constraint_node_count);
-                    if (is_found)
-                    {
-                        auto p_node = mrMainModelPart.CreateNewNode(node.Id(), node);
-                        p_node->GetSolutionStepValue(PARTITION_INDEX) = node.FastGetSolutionStepValue(PARTITION_INDEX);
-                        //TODO: Id of these nodes should be stored on the main modelpart.
-                        //      And these should be deleted in InitializeSolutionStep
-                        mRemoteNodes.push_back(node.Id());
-                        constraint_node_count++;
-                    }
-                }
-            }
-
-        KRATOS_INFO_IF_ALL_RANKS("DoRemoteSearch 4 ", true)<<" "<<std::endl;
-        // TODO: Once all the required nodes are added, we should call Parallel Fill communicator.
-#ifdef KRATOS_USING_MPI
-        ParallelFillCommunicator(mrMainModelPart).Execute();
-#endif
-    }
 
     /**
      * @brief Utility function to print out various intermediate modelparts
