@@ -73,7 +73,7 @@ def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
 
 def AddModelPart(model_part_1,
                  model_part_2,
-                 add_as_submodelpart=False, is_mpi=True):
+                 add_as_submodelpart=False, is_mpi=False):
     '''
     Adding the model_part_2 to model_part_1 (appending)
     '''
