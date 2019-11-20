@@ -139,6 +139,7 @@ protected:
      */
     void ApplyContinuityWithMpcs(ModelPart &rBoundaryModelPart, PointLocatorType &rBinLocator) override
     {
+        auto& r_comm = BaseType::mrMainModelPart.GetCommunicator().GetDataCommunicator();
         //loop over nodes and find the triangle in which it falls, then do interpolation
         MasterSlaveContainerVectorType master_slave_container_vector;
         BaseType::ReserveMemoryForConstraintContainers(rBoundaryModelPart, master_slave_container_vector);
@@ -156,8 +157,8 @@ protected:
         BaseType::FormulateConstraints(rBoundaryModelPart, rBinLocator, master_slave_container_vector, master_slave_container_vector);
         BuiltinTimer mpc_add_time;
         BaseType::AddConstraintsToModelpart(BaseType::mrMainModelPart, master_slave_container_vector);
-        KRATOS_INFO_IF("Adding of MPCs from containers to modelpart took : ", BaseType::mEchoLevel > 1)<< mpc_add_time.ElapsedSeconds()<< " seconds"<< std::endl;
-        KRATOS_INFO_IF("Number of boundary nodes in : ", BaseType::mEchoLevel > 1) << rBoundaryModelPart.Name() << " : " << rBoundaryModelPart.NumberOfNodes() << std::endl;
+        auto add_time = mpc_add_time.ElapsedSeconds();
+        KRATOS_INFO_IF("Adding of MPCs from containers to modelpart took : ", BaseType::mEchoLevel > 1)<< r_comm.Max(add_time, 0)<< " seconds"<< std::endl;
     }
 
     ///@}
