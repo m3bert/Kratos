@@ -318,10 +318,12 @@ protected:
         mNodeIdToConstraintIdsMap.clear();
         mPointLocatorsMap.clear();
 
-        KRATOS_INFO_IF("Chrimera Initialization took : ", mEchoLevel > 0)
-            << do_chimera_loop_time.ElapsedSeconds() << " seconds" << std::endl;
+        const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
+        double chimera_elased_seconds = do_chimera_loop_time.ElapsedSeconds();
+        KRATOS_INFO_IF("Chrimera Initialization took : ", mEchoLevel > 0)<< r_comm.Max(chimera_elased_seconds, 0) << " seconds" << std::endl;
+        int num_local_constraints = mrMainModelPart.NumberOfMasterSlaveConstraints();
 
-        KRATOS_INFO_IF("Total number of constraints created so far", mEchoLevel > 0) << mrMainModelPart.NumberOfMasterSlaveConstraints() << std::endl;
+        KRATOS_INFO_IF("Total number of constraints created so far", mEchoLevel > 0) << r_comm.Max(num_local_constraints, 0) << std::endl;
     }
 
     /**
@@ -337,8 +339,6 @@ protected:
         ModelPart &r_background_model_part = current_model.GetModelPart(BackgroundParam["model_part_name"].GetString());
         ModelPart &r_background_boundary_model_part = r_background_model_part.GetSubModelPart("chimera_boundary_mp");
         ModelPart &r_patch_model_part = current_model.GetModelPart(PatchParameters["model_part_name"].GetString());
-        // KRATOS_INFO_IF("CHECK : ", mEchoLevel > 0) << r_patch_model_part << std::endl;
-        // KRATOS_INFO_IF("CHECK : ", mEchoLevel > 0) << r_background_model_part << std::endl;
         const std::string bg_search_mp_name = BackgroundParam["search_model_part_name"].GetString();
         auto &r_background_search_model_part = current_model.HasModelPart(bg_search_mp_name) ? current_model.GetModelPart(bg_search_mp_name) : r_background_model_part;
 
@@ -350,8 +350,7 @@ protected:
         PointLocatorPointerType p_point_locator_on_background = GetPointLocator(r_background_search_model_part);
         PointLocatorPointerType p_pointer_locator_on_patch = GetPointLocator(r_patch_model_part);
         auto elapsed_search_creation_time = search_creation_time.ElapsedSeconds();
-        r_comm.Max(elapsed_search_creation_time, 0);
-        KRATOS_INFO_IF("Creation of search structures took : ", mEchoLevel > 0) << elapsed_search_creation_time << " seconds" << std::endl;
+        KRATOS_INFO_IF("Creation of search structures took : ", mEchoLevel > 0) << r_comm.Max(elapsed_search_creation_time, 0) << " seconds" << std::endl;
         KRATOS_ERROR_IF(over_lap_distance < 1e-12) << "Overlap distance should be a positive and non-zero number." << std::endl;
 
         ModelPart &r_hole_model_part = current_model.CreateModelPart("HoleModelpart");
@@ -366,14 +365,12 @@ protected:
         DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::CalculateDistance(r_background_model_part,
                                                                                                r_modified_patch_boundary_model_part);
         auto bg_distance_calc_time_elapsed = bg_distance_calc_time.ElapsedSeconds();
-        r_comm.Max(bg_distance_calc_time_elapsed, 0);
-        KRATOS_INFO_IF("Distance calculation on background took : ", mEchoLevel > 0) << bg_distance_calc_time_elapsed << " seconds" << std::endl;
+        KRATOS_INFO_IF("Distance calculation on background took : ", mEchoLevel > 0) << r_comm.Max(bg_distance_calc_time_elapsed, 0) << " seconds" << std::endl;
 
         BuiltinTimer hole_creation_time;
         ChimeraHoleCuttingUtility().CreateHoleAfterDistance<TDim>(r_background_model_part, r_hole_model_part, r_hole_boundary_model_part, over_lap_distance);
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
-        r_comm.Max(hole_creation_time_elapsed, 0);
-        KRATOS_INFO_IF("Hole creation took : ", mEchoLevel > 0) << hole_creation_time_elapsed << " seconds" << std::endl;
+        KRATOS_INFO_IF("Hole creation took : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
         // WriteModelPart(r_hole_model_part);
         // WriteModelPart(r_background_model_part);
@@ -393,8 +390,7 @@ protected:
         ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
         ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
-        r_comm.Max(mpc_time_elapsed, 0);
-        KRATOS_INFO_IF("Creation of MPC for chimera took : ", mEchoLevel > 0) << mpc_time_elapsed << " seconds" << std::endl;
+        KRATOS_INFO_IF("Creation of MPC for chimera took : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
 
         current_model.DeleteModelPart("HoleModelpart");
         current_model.DeleteModelPart("HoleBoundaryModelPart");
@@ -579,6 +575,7 @@ protected:
     void FormulateConstraints(ModelPart &rModelPart, PointLocatorType &rBinLocator, MasterSlaveContainerVectorType &rVelocityMasterSlaveContainerVector,
                               MasterSlaveContainerVectorType &rPressureMasterSlaveContainerVector)
     {
+        ModelPart& r_chimera_transfer_mp = rModelPart.CreateSubModelPart("chimera_transfer");
         const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         const int mpi_rank = r_comm.Rank();
         Model &current_model = mrMainModelPart.GetModel();
@@ -591,7 +588,7 @@ protected:
         CreateConstraintIds(constraints_id_vector, num_constraints_required);
         auto& r_nodes = mrMainModelPart.Nodes();
 
-        IndexType counter = 0;
+        IndexType found_counter = 0;
         IndexType not_found_counter = 0;
 
         BuiltinTimer loop_over_b_nodes;
@@ -610,18 +607,13 @@ protected:
             {
                 auto p_index = p_boundary_node->FastGetSolutionStepValue(PARTITION_INDEX);
                 if( p_index == mpi_rank){
-                    counter += 1;
+                    found_counter += 1;
                 }else{
                     if(r_nodes.find(p_boundary_node->Id()) == r_nodes.end()){
                         auto p_node = mrMainModelPart.CreateNewNode(p_boundary_node->Id(), *p_boundary_node);
                         p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
                     }
                 }
-            }
-            else
-            {
-                not_found_counter += 1;
-                vector_of_non_found_nodes.push_back(p_boundary_node->Id());
             }
         }
 
@@ -634,9 +626,13 @@ protected:
         current_model.DeleteModelPart("GatheredBoundary");
 #endif
         }
-        KRATOS_INFO_IF_ALL_RANKS("Loop over boundary nodes took : ", mEchoLevel > 1) << loop_over_b_nodes.ElapsedSeconds() << " seconds" << std::endl;
-        KRATOS_INFO_IF_ALL_RANKS("Number of Boundary nodes found : ", mEchoLevel > 1) << counter << ". Number of constraints : " << counter * 9 << std::endl;
-        KRATOS_INFO_IF_ALL_RANKS("Number of Boundary nodes not found  : ", mEchoLevel > 1) << not_found_counter << std::endl;
+
+        double loop_time = loop_over_b_nodes.ElapsedSeconds();
+        KRATOS_INFO_IF("Loop over boundary nodes took             : ", mEchoLevel > 1) << r_comm.Max(loop_time, 0) << " seconds" << std::endl;
+        int global_num_found = r_comm.Sum(found_counter, 0);
+        KRATOS_INFO_IF("Number of Boundary nodes found            : ", mEchoLevel > 1) << global_num_found << std::endl;
+        KRATOS_INFO_IF("Number of Boundary nodes not found        : ", mEchoLevel > 1) << n_boundary_nodes - global_num_found << std::endl;
+        KRATOS_INFO_IF("Number of constraints made                : ", mEchoLevel > 1) << global_num_found*9 << std::endl;
     }
 
     ///@}
