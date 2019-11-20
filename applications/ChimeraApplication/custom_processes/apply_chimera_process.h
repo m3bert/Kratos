@@ -575,7 +575,6 @@ protected:
     void FormulateConstraints(ModelPart &rModelPart, PointLocatorType &rBinLocator, MasterSlaveContainerVectorType &rVelocityMasterSlaveContainerVector,
                               MasterSlaveContainerVectorType &rPressureMasterSlaveContainerVector)
     {
-        ModelPart& r_chimera_transfer_mp = rModelPart.CreateSubModelPart("chimera_transfer");
         const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         const int mpi_rank = r_comm.Rank();
         Model &current_model = mrMainModelPart.GetModel();
@@ -589,7 +588,7 @@ protected:
         auto& r_nodes = mrMainModelPart.Nodes();
 
         IndexType found_counter = 0;
-        IndexType not_found_counter = 0;
+        std::vector<IndexType> nodes_to_add;
 
         BuiltinTimer loop_over_b_nodes;
 #pragma omp parallel for shared(constraints_id_vector, rVelocityMasterSlaveContainerVector, rPressureMasterSlaveContainerVector, rBinLocator)
@@ -601,23 +600,13 @@ protected:
             ModelPart::NodesContainerType::iterator i_boundary_node = gathered_modelpart.NodesBegin() + i_bn;
             NodeType::Pointer p_boundary_node = *(i_boundary_node.base());
             unsigned int start_constraint_id = i_bn * (TDim + 1) * (TDim + 1);
-            bool is_found = SearchNodeAndMakeConstraints(*p_boundary_node, rBinLocator, ms_velocity_container, ms_pressure_container,
+            bool is_found = SearchNodeAndMakeConstraints(p_boundary_node, rBinLocator, ms_velocity_container, ms_pressure_container,
                                                          constraints_id_vector, start_constraint_id);
             if (is_found)
-            {
-                auto p_index = p_boundary_node->FastGetSolutionStepValue(PARTITION_INDEX);
-                if( p_index != mpi_rank){
-                    if(r_nodes.find(p_boundary_node->Id()) == r_nodes.end()){
-                        auto p_node = mrMainModelPart.CreateNewNode(p_boundary_node->Id(), *p_boundary_node);
-                        p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
-                    }
-                }
                 found_counter += 1;
-            }
         }
 
-        // TODO: Once local search is done, do remote search
-
+        KRATOS_INFO_IF_ALL_RANKS("Before Calling on mrMainMp ", true)<<std::endl;
         if (r_comm.IsDistributed())
         {
 #ifdef KRATOS_USING_MPI
@@ -735,14 +724,14 @@ private:
     /**
      * @brief Searches for a given node using given locator and adds the velocity
      *        and pressureconstraints to the respecitive containers.
-     * @param rNodeToFind The node which is to be found
+     * @param pNodeToFind The node which is to be found
      * @param rBinLocator The bin based locator formulated on the background. This is used to locate nodes on rBoundaryModelPart.
      * @param rVelocityMsConstraintsVector the velocity constraints vector
      * @param rPressureMsConstraintsVector the pressure constraints vector
      * @param rConstraintIdVector the vector of constraint ids which are to be used.
      * @param StartConstraintId the start index of the constraints
      */
-    bool SearchNodeAndMakeConstraints(NodeType &rNodeToFind, PointLocatorType &rBinLocator,
+    bool SearchNodeAndMakeConstraints(NodeType::Pointer pNodeToFind, PointLocatorType &rBinLocator,
                                       MasterSlaveConstraintContainerType &rVelocityMsConstraintsVector,
                                       MasterSlaveConstraintContainerType &rPressureMsConstraintsVector,
                                       std::vector<int> &rConstraintIdVector,
@@ -753,17 +742,20 @@ private:
         typename PointLocatorType::ResultContainerType results(max_results);
         typename PointLocatorType::ResultIteratorType result_begin = results.begin();
         Element::Pointer p_element;
+        auto& r_nodes = mrMainModelPart.Nodes();
+        const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
+        const int mpi_rank = r_comm.Rank();
 
         bool is_found = false;
-        is_found = rBinLocator.FindPointOnMesh(rNodeToFind.Coordinates(), shape_fun_weights, p_element, result_begin, max_results);
+        is_found = rBinLocator.FindPointOnMesh(pNodeToFind->Coordinates(), shape_fun_weights, p_element, result_begin, max_results);
 
         bool node_coupled = false;
-        if (rNodeToFind.IsDefined(VISITED))
-            node_coupled = rNodeToFind.Is(VISITED);
+        if (pNodeToFind->IsDefined(VISITED))
+            node_coupled = pNodeToFind->Is(VISITED);
 
         if (node_coupled && is_found)
         {
-            auto &constrainIds_for_the_node = mNodeIdToConstraintIdsMap[rNodeToFind.Id()];
+            auto &constrainIds_for_the_node = mNodeIdToConstraintIdsMap[pNodeToFind->Id()];
             for (auto const &constraint_id : constrainIds_for_the_node)
             {
 #pragma omp critical
@@ -772,23 +764,44 @@ private:
                 }
             }
             constrainIds_for_the_node.clear();
-            rNodeToFind.Set(VISITED, false);
+            pNodeToFind->Set(VISITED, false);
         }
 
         if (is_found)
         {
+
+            NodeType::Pointer p_found_node;
+            auto p_index = pNodeToFind->FastGetSolutionStepValue(PARTITION_INDEX);
+            if( p_index != mpi_rank){
+                auto searched_node_it = r_nodes.find(pNodeToFind->Id());
+                if(searched_node_it == r_nodes.end()){
+                    auto p_node = mrMainModelPart.CreateNewNode(pNodeToFind->Id(), *pNodeToFind);
+                    p_node->AddDof(VELOCITY_X, REACTION_X);
+                    p_node->AddDof(VELOCITY_Y, REACTION_Y);
+                    p_node->AddDof(VELOCITY_Z, REACTION_Z);
+                    p_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
+                    p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
+                    p_found_node = p_node;
+                }else{
+                    p_found_node = mrMainModelPart.pGetNode(searched_node_it->Id());
+                }
+            }else{
+                p_found_node = pNodeToFind;
+            }
+
+
             Geometry<NodeType> &r_geom = p_element->GetGeometry();
             int init_index = 0;
-            ApplyContinuityWithElement(r_geom, rNodeToFind, shape_fun_weights, VELOCITY_X, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_X, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
             init_index += (TDim + 1);
-            ApplyContinuityWithElement(r_geom, rNodeToFind, shape_fun_weights, VELOCITY_Y, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_Y, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
             init_index += (TDim + 1);
             if (TDim == 3)
             {
-                ApplyContinuityWithElement(r_geom, rNodeToFind, shape_fun_weights, VELOCITY_Z, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+                ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_Z, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
                 init_index += (TDim + 1);
             }
-            ApplyContinuityWithElement(r_geom, rNodeToFind, shape_fun_weights, PRESSURE, StartConstraintId + init_index, rConstraintIdVector, rPressureMsConstraintsVector);
+            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, PRESSURE, StartConstraintId + init_index, rConstraintIdVector, rPressureMsConstraintsVector);
             init_index += (TDim + 1);
         }
         return is_found;
