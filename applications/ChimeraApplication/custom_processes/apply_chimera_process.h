@@ -168,13 +168,15 @@ public:
         if (mReformulateEveryStep || !mIsFormulated)
         {
             const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
-            const int mpi_rank = r_comm.Rank();
-            for(const auto& node_id : mRemoteNodes)
-            {
-                if(mrMainModelPart.GetNode(node_id).FastGetSolutionStepValue(PARTITION_INDEX) != mpi_rank)
-                    mrMainModelPart.RemoveNodeFromAllLevels(node_id);
+            if(r_comm.IsDistributed()){
+                const int mpi_rank = r_comm.Rank();
+                for(const auto& node_id : mRemoteNodes)
+                {
+                    if(mrMainModelPart.GetNode(node_id).FastGetSolutionStepValue(PARTITION_INDEX) != mpi_rank)
+                        mrMainModelPart.RemoveNodeFromAllLevels(node_id);
+                }
+                mRemoteNodes.clear();
             }
-            mRemoteNodes.clear();
             DoChimeraLoop();
             mIsFormulated = true;
         }
@@ -185,7 +187,7 @@ public:
     {
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Nodes());
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Elements());
-        VariableUtils().SetFlag(ACTIVE, true, mrMainModelPart.Elements());
+        // VariableUtils().SetFlag(ACTIVE, true, mrMainModelPart.Elements());
         VariableUtils().SetNonHistoricalVariable(SPLIT_ELEMENT, false, mrMainModelPart.Elements());
 
         if (mReformulateEveryStep)
@@ -323,7 +325,7 @@ protected:
         KRATOS_INFO_IF("ApplyChimera : Chrimera Initialization took                 : ", mEchoLevel > 0)<< r_comm.Max(chimera_elased_seconds, 0) << " seconds" << std::endl;
         int num_local_constraints = mrMainModelPart.NumberOfMasterSlaveConstraints();
 
-        KRATOS_INFO_IF("ApplyChimera : Total number of constraints created so far   :", mEchoLevel > 0) << r_comm.Max(num_local_constraints, 0) << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Total number of constraints created so far   :", mEchoLevel > 0) << r_comm.Sum(num_local_constraints, 0) << std::endl;
     }
 
     /**
@@ -387,8 +389,8 @@ protected:
         }
 
         BuiltinTimer mpc_time;
-        //ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
-        ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
+        // ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
+        // ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took         : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
 
@@ -396,8 +398,6 @@ protected:
         current_model.DeleteModelPart("HoleBoundaryModelPart");
         current_model.DeleteModelPart("ModifiedPatchBoundary");
 
-        // r_comm.Barrier();
-        // exit(-1);
         KRATOS_INFO("End of Formulate Chimera") << std::endl;
     }
 
@@ -579,7 +579,9 @@ protected:
         const int mpi_rank = r_comm.Rank();
         Model &current_model = mrMainModelPart.GetModel();
         auto& gathered_modelpart = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredBoundary") : rModelPart;
-        DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rModelPart, gathered_modelpart);
+        if(r_comm.IsDistributed())
+            DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rModelPart, gathered_modelpart);
+
         std::vector<int> vector_of_non_found_nodes;
         const int n_boundary_nodes = static_cast<int>(gathered_modelpart.Nodes().size());
         std::vector<int> constraints_id_vector;
@@ -606,7 +608,6 @@ protected:
                 found_counter += 1;
         }
 
-        KRATOS_INFO_IF_ALL_RANKS("Before Calling on mrMainMp ", true)<<std::endl;
         if (r_comm.IsDistributed())
         {
 #ifdef KRATOS_USING_MPI
@@ -771,19 +772,23 @@ private:
         {
 
             NodeType::Pointer p_found_node;
-            auto p_index = pNodeToFind->FastGetSolutionStepValue(PARTITION_INDEX);
-            if( p_index != mpi_rank){
-                auto searched_node_it = r_nodes.find(pNodeToFind->Id());
-                if(searched_node_it == r_nodes.end()){
-                    auto p_node = mrMainModelPart.CreateNewNode(pNodeToFind->Id(), *pNodeToFind);
-                    p_node->AddDof(VELOCITY_X, REACTION_X);
-                    p_node->AddDof(VELOCITY_Y, REACTION_Y);
-                    p_node->AddDof(VELOCITY_Z, REACTION_Z);
-                    p_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
-                    p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
-                    p_found_node = p_node;
+            if(r_comm.IsDistributed()){
+                auto p_index = pNodeToFind->FastGetSolutionStepValue(PARTITION_INDEX);
+                if( p_index != mpi_rank){
+                    auto searched_node_it = r_nodes.find(pNodeToFind->Id());
+                    if(searched_node_it == r_nodes.end()){
+                        auto p_node = mrMainModelPart.CreateNewNode(pNodeToFind->Id(), *pNodeToFind);
+                        p_node->AddDof(VELOCITY_X, REACTION_X);
+                        p_node->AddDof(VELOCITY_Y, REACTION_Y);
+                        p_node->AddDof(VELOCITY_Z, REACTION_Z);
+                        p_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
+                        p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
+                        p_found_node = p_node;
+                    }else{
+                        p_found_node = mrMainModelPart.pGetNode(searched_node_it->Id());
+                    }
                 }else{
-                    p_found_node = mrMainModelPart.pGetNode(searched_node_it->Id());
+                    p_found_node = pNodeToFind;
                 }
             }else{
                 p_found_node = pNodeToFind;
