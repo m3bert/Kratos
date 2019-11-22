@@ -13,18 +13,17 @@ from KratosMultiphysics.FluidDynamicsApplication import TrilinosExtension as Tri
 from KratosMultiphysics.FluidDynamicsApplication.trilinos_navier_stokes_solver_vmsmonolithic import TrilinosNavierStokesSolverMonolithic
 
 def CreateSolver(main_model_part, custom_settings):
-    return TrilinosNavierStokesSolverMonolithic(main_model_part, custom_settings)
+    return TrilinosChimeraNavierStokesSolverMonolithic(main_model_part, custom_settings)
 
-class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic):
+class TrilinosChimeraNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic):
     def __init__(self, model, custom_settings):
         self.chimera_settings = custom_settings["chimera_settings"].Clone()
         custom_settings.RemoveValue("chimera_settings")
-        super(TrilinosNavierStokesSolverMonolithic,self).__init__(model,custom_settings)
-
-        KratosMultiphysics.Logger.PrintInfo("TrilinosNavierStokesSolverMonolithic", "Construction of NavierStokesSolverMonolithic finished.")
+        super(TrilinosChimeraNavierStokesSolverMonolithic,self).__init__(model,custom_settings)
+        KratosMultiphysics.Logger.PrintInfo("TrilinosChimeraNavierStokesSolverMonolithic", "Construction of NavierStokesSolverMonolithic finished.")
 
     def AddVariables(self):
-        super(TrilinosNavierStokesSolverMonolithic,self).AddVariables()
+        super(TrilinosChimeraNavierStokesSolverMonolithic,self).AddVariables()
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.DISTANCE)
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.FLAG_VARIABLE)
         self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATIONAL_ANGLE)
@@ -32,7 +31,7 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
         self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATION_MESH_DISPLACEMENT)
         self.main_model_part.AddNodalSolutionStepVariable(KratosChimera.ROTATION_MESH_VELOCITY)
 
-        KratosMultiphysics.Logger.PrintInfo("TrilinosNavierStokesSolverMonolithic", "Fluid solver variables added correctly.")
+        KratosMultiphysics.Logger.PrintInfo("TrilinosChimeraNavierStokesSolverMonolithic", "Fluid solver variables added correctly.")
 
     def ImportModelPart(self):
         if(self.settings["model_import_settings"]["input_type"].GetString() == "chimera"):
@@ -46,16 +45,17 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
             chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_file_names, material_file=material_file_name, parallel_type="MPI")
             KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", " Import of all chimera modelparts completed.")
         else:# we can use the default implementation in the base class
-            super(TrilinosNavierStokesSolverMonolithic,self).ImportModelPart()
-    def Initialize(self):
+            super(TrilinosChimeraNavierStokesSolverMonolithic,self).ImportModelPart()
 
+    def Initialize(self):
         ## Construct the communicator
         self.EpetraCommunicator = KratosTrilinos.CreateCommunicator()
         if hasattr(self, "_turbulence_model_solver"):
             self._turbulence_model_solver.SetCommunicator(self.EpetraCommunicator)
 
         ## Get the computing model part
-        self.computing_model_part = self.GetComputingModelPart()
+        # self.computing_model_part = self.GetComputingModelPart()
+        self.computing_model_part = self.main_model_part
 
         ## If needed, create the estimate time step utility
         if (self.settings["time_stepping"]["automatic_time_step"].GetBool()):
@@ -128,9 +128,9 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
                             self._turbulence_model_solver.GetTurbulenceSolvingProcess())
 
         ## Set the guess_row_size (guess about the number of zero entries) for the Trilinos builder and solver
-        if self.main_model_part.ProcessInfo[KratosMultiphysics.DOMAIN_SIZE] == 3:
+        if self.computing_model_part.ProcessInfo[KratosMultiphysics.DOMAIN_SIZE] == 3:
             guess_row_size = 20*4
-        elif self.main_model_part.ProcessInfo[KratosMultiphysics.DOMAIN_SIZE] == 2:
+        elif self.computing_model_part.ProcessInfo[KratosMultiphysics.DOMAIN_SIZE] == 2:
             guess_row_size = 10*3
 
         ## Construct the Trilinos builder and solver
@@ -139,11 +139,11 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
             raise NotImplementedError
         else:
             # TODO: This should be trilinos version
-            self.builder_and_solver = TrilinosChimera.TrilinosChimeraResidualBasedBuilderAndSolver(self.EpetraCommunicator,
+            self.builder_and_solver =  TrilinosChimera.TrilinosChimeraResidualBasedBuilderAndSolver(self.EpetraCommunicator,
                                                                                    guess_row_size,
                                                                                    self.trilinos_linear_solver)
         ## Construct the Trilinos Newton-Raphson strategy
-        self.solver = KratosTrilinos.TrilinosNewtonRaphsonStrategy(self.main_model_part,
+        self.solver = KratosTrilinos.TrilinosNewtonRaphsonStrategy(self.computing_model_part,
                                                                    self.time_scheme,
                                                                    self.trilinos_linear_solver,
                                                                    self.conv_criteria,
@@ -160,3 +160,10 @@ class TrilinosNavierStokesSolverMonolithic(TrilinosNavierStokesSolverMonolithic)
         (self.solver).Initialize()
 
         KratosMultiphysics.Logger.Print("Monolithic MPI solver initialization finished.")
+
+
+    def Finalize(self):
+        self.solver.Clear()
+
+        if hasattr(self, "_turbulence_model_solver"):
+            self._turbulence_model_solver.Finalize()
