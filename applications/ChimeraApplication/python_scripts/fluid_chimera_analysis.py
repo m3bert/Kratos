@@ -96,12 +96,12 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
             KratosMultiphysics.VariableUtils().SetFlag(KratosChimera.CHIMERA_INTERNAL_BOUNDARY, True,  self.model[mp_name.GetString()].Nodes)
 
     def InitializeSolutionStep(self):
-        self.PrintAnalysisStageProgressInformation()
         self.ApplyBoundaryConditions() #here the processes are called
         self.ChangeMaterialProperties() #this is normally empty
         ## The following will construct the constraints
-        self.chimera_process.ExecuteInitializeSolutionStep()
-        #self._GetSolver().InitializeSolutionStep()
+        #self.chimera_process.ExecuteInitializeSolutionStep()
+        self._GetSolver().InitializeSolutionStep()
+        self.PrintAnalysisStageProgressInformation()
 
     def RunSolutionLoop(self):
         """This function executes the solution loop of the AnalysisStage
@@ -110,16 +110,16 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
         while self.KeepAdvancingSolutionLoop():
             self.time = self._GetSolver().AdvanceInTime(self.time)
             self.InitializeSolutionStep()
-            #self._GetSolver().Predict()
-            #is_converged = self._GetSolver().SolveSolutionStep()
+            self._GetSolver().Predict()
+            is_converged = self._GetSolver().SolveSolutionStep()
             #self.__CheckIfSolveSolutionStepReturnsAValue(is_converged)
-            self.OutputSolutionStep()
             self.FinalizeSolutionStep()
+            self.OutputSolutionStep()
 
     def FinalizeSolutionStep(self):
         super(FluidChimeraAnalysis,self).FinalizeSolutionStep()
         ## Depending on the setting this will clear the created constraits
-        self.chimera_process.ExecuteFinalizeSolutionStep()
+        #self.chimera_process.ExecuteFinalizeSolutionStep()
 
 
     def _CreateSolver(self):
