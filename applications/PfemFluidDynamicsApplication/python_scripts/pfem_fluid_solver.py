@@ -4,7 +4,7 @@ import os
 import KratosMultiphysics
 import KratosMultiphysics.PfemFluidDynamicsApplication as KratosPfemFluid
 from KratosMultiphysics.python_solver import PythonSolver
-
+import KratosMultiphysics.DelaunayMeshingApplication  as KratosDelaunay
 
 def CreateSolver(model, parameters):
     return PfemFluidSolver(model, parameters)
@@ -200,6 +200,17 @@ class PfemFluidSolver(PythonSolver):
         self.main_model_part.AddNodalSolutionStepVariable(KratosPfemFluid.PRESSURE_REACTION)
         self.main_model_part.AddNodalSolutionStepVariable(KratosPfemFluid.PRESSURE_ACCELERATION)
 
+        # PFEM Extra variables
+        self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.NODAL_H)
+
+        self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.CONTACT_FORCE)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.CONTACT_NORMAL)
+
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDelaunay.OFFSET)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDelaunay.SHRINK_FACTOR)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDelaunay.MEAN_ERROR)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosDelaunay.RIGID_WALL)
+
         print("::[Pfem Fluid Solver]:: Variables ADDED")
 
 
@@ -215,17 +226,21 @@ class PfemFluidSolver(PythonSolver):
             node.AddDof(KratosMultiphysics.DISPLACEMENT_X)
             node.AddDof(KratosMultiphysics.DISPLACEMENT_Y)
             node.AddDof(KratosMultiphysics.DISPLACEMENT_Z)
+            node.AddDof(KratosMultiphysics.TEMPERATURE)
         print("::[Pfem Fluid Solver]:: DOF's ADDED")
 
-
     def ImportModelPart(self):
+        # we can use the default implementation in the base class
+        self._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
+
+    def PrepareModelPart(self):
 
         print("::[Pfem Fluid Solver]:: Model reading starts.")
 
         self.computing_model_part_name = "fluid_computing_domain"
 
         # we can use the default implementation in the base class
-        self._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
+        #self._ImportModelPart(self.main_model_part,self.settings["model_import_settings"])
 
         # Auxiliary Kratos parameters object to be called by the CheckAndPepareModelProcess
         params = KratosMultiphysics.Parameters("{}")
