@@ -162,7 +162,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
 
     def AddDofs(self):
         self.fluid_solver.AddDofs()
-        #self.thermal_solver.AddDofs()
+        self.thermal_solver.AddDofs()
 
     def GetComputingModelPart(self):
         return self.fluid_solver.GetComputingModelPart()
