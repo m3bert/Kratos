@@ -107,6 +107,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
             "thermal_solver_settings": {
                 "solver_type": "Transient",
                 "analysis_type": "linear",
+                "buffer_size": 3,
                 "computing_model_part_name": "thermal_computing_domain",
                 "model_import_settings": {
                     "input_type": "use_input_model_part"
@@ -170,10 +171,10 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
     def ComputeDeltaTime(self):
         return self.fluid_solver._ComputeDeltaTime()
 
-    #def GetMinimumBufferSize(self):
-    #    buffer_size_fluid = self.fluid_solver.GetMinimumBufferSize()
-    #    buffer_size_thermal = self.thermal_solver.GetMinimumBufferSize()
-    #    return max(buffer_size_fluid, buffer_size_thermal)
+    def GetMinimumBufferSize(self):
+        buffer_size_fluid = self.fluid_solver.GetMinimumBufferSize()
+        buffer_size_thermal = self.thermal_solver.GetMinimumBufferSize()
+        return max(buffer_size_fluid, buffer_size_thermal)
 
     def Initialize(self):
         self.fluid_solver.Initialize()
@@ -232,7 +233,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #self.AuxiliarCallsAfterRemesh()
         print("fluid nodes number: {}, thermal nodes number: {}".format(len(self.fluid_solver.main_model_part.GetNodes()), len(self.thermal_solver.main_model_part.GetNodes())))
         print("fluid elem number: {}, thermal elem number: {}".format(len(self.fluid_solver.main_model_part.GetElements()), len(self.thermal_solver.main_model_part.GetElements())))
-        #self.UpdateMeshVelocity()
+        self.UpdateMeshVelocity()
         #for elem in self.thermal_solver.main_model_part.Elements:
         #    print("thermal elem Id: {}, Property: {}".format(elem.Id, elem.Properties))
         thermal_is_converged = self.thermal_solver.SolveSolutionStep()
@@ -303,7 +304,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #self.thermal_solver.main_model_part.RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
 
         # We create new elements (TODO: the number of the property should be detected automatically)
-        for elem in self.fluid_solver.GetComputingModelPart().Elements:#GetComputingModelPart().Elements:
+        for elem in self.fluid_solver.main_model_part.Elements:#GetComputingModelPart().Elements:
             node_ids = []
             if self.domain_size == 2:
                 if len(elem.GetNodes())==3:
@@ -312,7 +313,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
                     self.thermal_solver.main_model_part.CreateNewElement("EulerianConvDiff2D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
             else:
                 node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id, elem.GetNode(3).Id]                    
-                self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff3D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
+                self.thermal_solver.main_model_part.CreateNewElement("EulerianConvDiff3D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
         KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ELEMENTS).Execute()
     
     def PrepareModelPart(self):
@@ -323,6 +324,8 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
             self.thermal_solver.main_model_part.AddNode(node,0)
         KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
         self.thermal_solver._assign_nodally_properties()
+        self.thermal_solver.min_buffer_size = self.GetMinimumBufferSize()
+        self.thermal_solver._set_and_fill_buffer()
         for elem in self.fluid_solver.GetComputingModelPart().Elements:
             node_ids = []
             if self.domain_size == 2:
@@ -334,7 +337,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
                 node_ids = [elem.GetNode(0).Id, elem.GetNode(1).Id, elem.GetNode(2).Id, elem.GetNode(3).Id]                    
                 self.thermal_solver.GetComputingModelPart().CreateNewElement("EulerianConvDiff3D", elem.Id, node_ids, self.thermal_solver.main_model_part.Properties[0])
         KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ELEMENTS).Execute()
-        self.thermal_solver.import_materials()
+        #self.thermal_solver.import_materials()
         #TODO: check for additional operations performed by the thermal solver that I'm missing
 
     def UpdateThermalNodes(self):
@@ -346,5 +349,7 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
                     ThereIsNode = True
             if not ThereIsNode:
                 self.thermal_solver.main_model_part.AddNode(FluidNode,0)
+        self.thermal_solver._assign_nodally_properties()
+        self.thermal_solver.AddDofs()
         KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
         
