@@ -42,6 +42,13 @@ void GenerateModelPart(Modeler& GM, ModelPart& origin_model_part, ModelPart& des
 
 }
 
+void CloneElement(Modeler& GM, Element& old_element, ModelPart& origin_model_part, ModelPart& destination_model_part, const std::string& rElementName)
+{
+    GM.CloneElement(old_element, origin_model_part, destination_model_part,
+                         KratosComponents<Element>::Get(rElementName));
+
+}
+
 void GenerateMesh(Modeler& GM, ModelPart& model_part, const std::string& rElementName, const std::string& rConditionName)
 {
     GM.GenerateMesh(model_part,
@@ -72,6 +79,7 @@ void  AddModelerToPython(pybind11::module& m)
     .def("GenerateModelPart",&GenerateModelPart)
     .def("GenerateMesh",&GenerateMesh)
     .def("GenerateNodes",&Modeler::GenerateNodes)
+    .def("CloneElement",&CloneElement)
     .def("__str__", PrintObject<Modeler>)
     ;
 
@@ -79,6 +87,7 @@ void  AddModelerToPython(pybind11::module& m)
     .def(py::init< >())
     .def("GenerateModelPart",&GenerateModelPart)
     .def("GenerateModelPart",&GeneratePartialModelPart)
+    .def("CloneElement",&CloneElement)
     ;
 
     py::class_< EdgeSwapping2DModeler, EdgeSwapping2DModeler::Pointer, Modeler >(m,"EdgeSwapping2DModeler")

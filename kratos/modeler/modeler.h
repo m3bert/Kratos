@@ -163,6 +163,11 @@ public:
         KRATOS_ERROR << "This modeler CAN NOT be used for node generation." << std::endl;
     }
 
+    virtual void CloneElement(Element& rOldElement, ModelPart& rOriginModelPart, ModelPart& rDestinationModelPart, const Element& rReferenceElement) 
+    {
+        KRATOS_ERROR << "This modeler CAN NOT be used for element cloning." << std::endl;
+    }
+
     ///@}
     ///@name Access
     ///@{

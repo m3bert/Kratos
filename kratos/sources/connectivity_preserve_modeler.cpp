@@ -88,6 +88,30 @@ void ConnectivityPreserveModeler::GenerateModelPart(
     KRATOS_CATCH("");
 }
 
+void ConnectivityPreserveModeler::CloneElement(
+    Element& rOldElement,
+    ModelPart& rOriginModelPart,
+    ModelPart& rDestinationModelPart,
+    const Element& rReferenceElement) 
+{
+    KRATOS_TRY;
+    // Generate the elements
+    ModelPart::ElementsContainerType temp_elements;
+    temp_elements.reserve(1);
+    //for (auto i_elem = rOriginModelPart.ElementsBegin(); i_elem != rOriginModelPart.ElementsEnd(); ++i_elem) {
+        Properties::Pointer properties = rOldElement.pGetProperties();
+
+        // Reuse the geometry of the old element (to save memory)
+        Element::Pointer p_element = rReferenceElement.Create(rOldElement.Id(), rOldElement.pGetGeometry(), properties);
+
+        temp_elements.push_back(p_element);
+    //}
+
+    rDestinationModelPart.AddElements(temp_elements.begin(), temp_elements.end());
+    //rDestinationModelPart.AddElements(p_element);
+    KRATOS_CATCH("");
+}
+
 // Private methods /////////////////////////////////////////////////////////////
 void ConnectivityPreserveModeler::CheckVariableLists(ModelPart& rOriginModelPart, ModelPart& rDestinationModelPart) const
 {

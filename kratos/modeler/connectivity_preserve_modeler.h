@@ -125,6 +125,12 @@ public:
         const Condition& rReferenceCondition
     );
 
+    virtual void CloneElement(
+        Element& rOldElement,
+        ModelPart& rOriginModelPart,
+        ModelPart& rDestinationModelPart,
+        const Element& rReferenceElement
+    ) override;
     ///@}
 
 private:
