@@ -36,14 +36,14 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         this_defaults = KratosMultiphysics.Parameters("""{
             "solver_type": "coupled_pfem_fluid_thermal_solver",
             "model_part_name": "PfemFluidModelPart",
-            "echo_level"                         : 1,
-            "fluid_solver_settings":{
-                "physics_type"   : "fluid",
-                "domain_size": 2,
-                "time_stepping"               : {
+            "time_stepping"               : {
                     "automatic_time_step" : false,
                     "time_step"           : 0.001
                 },
+                "domain_size": 2,
+            "echo_level"                         : 1,
+            "fluid_solver_settings":{
+                "physics_type"   : "fluid",
                 "model_import_settings":{
                     "input_type": "mdpa",
                     "input_filename": "unknown_name"

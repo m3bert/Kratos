@@ -52,7 +52,8 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #parallel.PrintOMPInfo()
 
         self.KratosPrintInfo(" ")
-        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
+        #self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
+        self.KratosPrintInfo("::[KPFEM Simulation]:: [Time Step:" + str(parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()) + " echo:" +  str(self.echo_level) + "]")
 
         #### Model_part settings start ####
         super(PfemFluidDynamicsAnalysis,self).__init__(model,parameters)
@@ -60,9 +61,12 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         # Defining the model_part
         self.main_model_part = self.model.GetModelPart(parameters["solver_settings"]["model_part_name"].GetString())
 
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["problem_data"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["problem_data"]["domain_size"].GetInt())
-        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["problem_data"]["time_stepping"]["time_step"].GetDouble())
+        #self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["problem_data"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.SPACE_DIMENSION, parameters["solver_settings"]["domain_size"].GetInt())
+        #self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["problem_data"]["domain_size"].GetInt())
+        #self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["problem_data"]["time_stepping"]["time_step"].GetDouble())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DOMAIN_SIZE, parameters["solver_settings"]["domain_size"].GetInt())
+        self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.DELTA_TIME, parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble())
         self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.TIME, parameters["problem_data"]["start_time"].GetDouble())
         if parameters["problem_data"].Has("gravity_vector"):
              self.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.GRAVITY_X, parameters["problem_data"]["gravity_vector"][0].GetDouble())
@@ -163,7 +167,9 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         self.time = self.main_model_part.ProcessInfo[KratosMultiphysics.TIME]
 
         self.end_time   = self.project_parameters["problem_data"]["end_time"].GetDouble()
-        self.delta_time = self.project_parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()
+        #self.delta_time = self.project_parameters["problem_data"]["time_stepping"]["time_step"].GetDouble()
+        #self.end_time   = self.project_parameters["solver_settings"]["end_time"].GetDouble()
+        self.delta_time = self.project_parameters["solver_settings"]["time_stepping"]["time_step"].GetDouble()
 
 
     def InitializeSolutionStep(self):
