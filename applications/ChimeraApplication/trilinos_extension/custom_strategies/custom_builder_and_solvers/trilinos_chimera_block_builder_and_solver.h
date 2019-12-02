@@ -590,20 +590,30 @@ public:
         // Taking dofs of elements
         for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
         {
-            pScheme->GetElementalDofList(*(it_elem), dof_list, r_current_process_info);
-            for (typename DofsVectorType::iterator i_dof = dof_list.begin();
-                 i_dof != dof_list.end(); ++i_dof)
-                temp_dofs_array.push_back(*i_dof);
+            const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
+
+            if (element_is_active)
+            {
+                pScheme->GetElementalDofList(*(it_elem), dof_list, r_current_process_info);
+                for (typename DofsVectorType::iterator i_dof = dof_list.begin();
+                    i_dof != dof_list.end(); ++i_dof)
+                    temp_dofs_array.push_back(*i_dof);
+            }
         }
 
         // Taking dofs of conditions
         auto &r_conditions_array = rModelPart.Conditions();
         for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
         {
-            pScheme->GetConditionDofList(*(it_cond), dof_list, r_current_process_info);
-            for (typename DofsVectorType::iterator i_dof = dof_list.begin();
-                 i_dof != dof_list.end(); ++i_dof)
-                temp_dofs_array.push_back(*i_dof);
+            const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
+
+            if (cond_is_active)
+            {
+                pScheme->GetConditionDofList(*(it_cond), dof_list, r_current_process_info);
+                for (typename DofsVectorType::iterator i_dof = dof_list.begin();
+                    i_dof != dof_list.end(); ++i_dof)
+                    temp_dofs_array.push_back(*i_dof);
+            }
         }
 
         temp_dofs_array.Unique();
@@ -687,10 +697,8 @@ public:
         r_comm.SynchronizeDofs();
 
         // For Constraints
-        if (rModelPart.NumberOfMasterSlaveConstraints() > 0)
-        {
-            FormulateGlobalMasterSlaveRelations(rModelPart);
-        }
+        FormulateGlobalMasterSlaveRelations(rModelPart);
+
     }
 
     /**
@@ -739,10 +747,15 @@ public:
                 Epetra_FECrsGraph Agraph(Copy, my_map, mGuessRowSize);
                 Element::EquationIdVectorType equation_ids_vector;
                 ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
-
                 // assemble all elements
                 for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
                 {
+                    const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
+
+                    if (!element_is_active)
+                    {
+                        continue;
+                    }
                     pScheme->EquationId(*(it_elem), equation_ids_vector,
                                         r_current_process_info);
 
@@ -769,6 +782,12 @@ public:
                 // assemble all conditions
                 for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
                 {
+                    const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
+
+                    if (!cond_is_active)
+                    {
+                        continue;
+                    }
                     pScheme->Condition_EquationId(
                         *(it_cond), equation_ids_vector, r_current_process_info);
 
@@ -1125,6 +1144,13 @@ protected:
             // assemble all elements
             for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
             {
+
+                const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
+
+                if (!element_is_active)
+                {
+                    continue;
+                }
                 pScheme->EquationId(*(it_elem), equation_ids_vector,
                                     r_current_process_info);
 
@@ -1153,6 +1179,12 @@ protected:
             // assemble all conditions
             for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
             {
+                const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
+
+                if (!cond_is_active)
+                {
+                    continue;
+                }
                 pScheme->Condition_EquationId(
                     *(it_cond), equation_ids_vector, r_current_process_info);
 
@@ -1322,7 +1354,6 @@ protected:
         KRATOS_TRY
         MasterSlaveConstraintType::DofPointerVectorType slave_dofs_vector;
         MasterSlaveConstraintType::DofPointerVectorType master_dofs_vector;
-        const double start_formulate = OpenMPUtils::GetCurrentTime();
         // First delete the existing ones
         mGlobalMasterSlaveConstraints.clear();
         int assembled_count = 0;
@@ -1363,7 +1394,6 @@ protected:
         KRATOS_INFO_ALL_RANKS("#### Number of local global constraints : ")<<num_local<<" number assembled : "<<assembled_count <<std::endl;
 
         const double stop_formulate = OpenMPUtils::GetCurrentTime();
-        KRATOS_INFO_IF("TrilinosChimeraBlockBuilderAndSolver", (this->GetEchoLevel() >= 1 && rModelPart.GetCommunicator().MyPID() == 0)) << "Formulate global constraints time: " << stop_formulate - start_formulate << std::endl;
 
         KRATOS_CATCH("TrilinosChimeraBlockBuilderAndSolver::FormulateGlobalMasterSlaveRelations failed ..");
     }
