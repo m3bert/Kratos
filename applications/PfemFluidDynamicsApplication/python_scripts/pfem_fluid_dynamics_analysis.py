@@ -190,12 +190,12 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #    #print("Id: {}, X: {}, Y: {}, T_0: {}, T_1: {}".format(node.Id, node.X, node.Y, node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1)))       
         #    print("Id: {}, T_0: {}, T_1: {}, T_2: {}".format(node.Id, node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,0),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,1),node.GetSolutionStepValue(KratosMultiphysics.TEMPERATURE,2)))       
         
-        #self._solver.AuxiliarCallsAfterRemesh()
+        self._solver.AuxiliarCallsAfterRemesh()
         
         for process in self._GetListOfProcesses():
             process.ExecuteInitializeSolutionStep()
 
-        self.GraphicalOutputExecuteInitializeSolutionStep()
+        #self.GraphicalOutputExecuteInitializeSolutionStep()
 
         # solve time step
         self._solver.InitializeSolutionStep()
@@ -208,7 +208,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         """
         self.clock_time = self.StartTimeMeasuring()
         self._GetSolver().FinalizeSolutionStep()
-        self.GraphicalOutputExecuteFinalizeSolutionStep()
+        #self.GraphicalOutputExecuteFinalizeSolutionStep()
 
         # processes to be executed at the end of the solution step
         self.model_processes.ExecuteFinalizeSolutionStep() # it calculates the volume after the remeshing process
@@ -221,7 +221,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
             process.ExecuteBeforeOutputStep()
 
         # write output results GiD: (frequency writing is controlled internally)
-        self.GraphicalOutputPrintOutput()
+        #self.GraphicalOutputPrintOutput()
 
         # processes to be executed after witting the output
         self.model_processes.ExecuteAfterOutputStep() #this process remesh the fluid domains if the flag "meshing_before_output" is set to false
