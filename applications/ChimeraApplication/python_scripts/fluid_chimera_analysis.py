@@ -95,29 +95,29 @@ class FluidChimeraAnalysis(FluidDynamicsAnalysis):
         for mp_name in self.chimera_internal_parts:
             KratosMultiphysics.VariableUtils().SetFlag(KratosChimera.CHIMERA_INTERNAL_BOUNDARY, True,  self.model[mp_name.GetString()].Nodes)
 
-    # def InitializeSolutionStep(self):
-    #     self.ApplyBoundaryConditions() #here the processes are called
-    #     self.ChangeMaterialProperties() #this is normally empty
-    #     ## The following will construct the constraints
-    #     self.chimera_process.ExecuteInitializeSolutionStep()
-    #     self._GetSolver().InitializeSolutionStep()
-    #     self.PrintAnalysisStageProgressInformation()
+    def InitializeSolutionStep(self):
+        self.PrintAnalysisStageProgressInformation()
+        self.ApplyBoundaryConditions() #here the processes are called
+        self.ChangeMaterialProperties() #this is normally empty
+        ## The following will construct the constraints
+        self.chimera_process.ExecuteInitializeSolutionStep()
+        self._GetSolver().InitializeSolutionStep()
 
-    def RunSolutionLoop(self):
-        """This function executes the solution loop of the AnalysisStage
-        It can be overridden by derived classes
-        """
-        step = 0
-        while self.KeepAdvancingSolutionLoop():
-            self.time = self._GetSolver().AdvanceInTime(self.time)
-            self.InitializeSolutionStep()
-            self._GetSolver().Predict()
-            if(step > 0):
-                is_converged = self._GetSolver().SolveSolutionStep()
-            #self.__CheckIfSolveSolutionStepReturnsAValue(is_converged)
-            self.FinalizeSolutionStep()
-            self.OutputSolutionStep()
-            step += 1
+    # def RunSolutionLoop(self):
+    #     """This function executes the solution loop of the AnalysisStage
+    #     It can be overridden by derived classes
+    #     """
+    #     step = 0
+    #     while self.KeepAdvancingSolutionLoop():
+    #         self.time = self._GetSolver().AdvanceInTime(self.time)
+    #         self.InitializeSolutionStep()
+    #         self._GetSolver().Predict()
+    #         if(step > 0):
+    #             is_converged = self._GetSolver().SolveSolutionStep()
+    #         #self.__CheckIfSolveSolutionStepReturnsAValue(is_converged)
+    #         self.FinalizeSolutionStep()
+    #         self.OutputSolutionStep()
+    #         step += 1
 
     def FinalizeSolutionStep(self):
         super(FluidChimeraAnalysis,self).FinalizeSolutionStep()
