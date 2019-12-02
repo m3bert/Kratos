@@ -87,26 +87,6 @@ public:
         const DataCommunicator &r_comm =
             rVolumeModelPart.GetCommunicator().GetDataCommunicator();
         ModelPart &r_gathered_skin_mp = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredSkin") : rSkinModelPart;
-        // Parameters vtk_parameters(R"(
-        //         {
-        //             "output_control_type"                : "step",
-        //             "output_frequency"                   : 1,
-        //             "file_format"                        : "ascii",
-        //             "output_precision"                   : 3,
-        //             "output_sub_model_parts"             : false,
-        //             "folder_name"                        : "test_vtk_output",
-        //             "save_output_files_in_folder"        : false,
-        //             "nodal_solution_step_data_variables" : ["VELOCITY","PRESSURE","DISTANCE"],
-        //             "nodal_data_value_variables"         : [],
-        //             "element_flags"                      : ["ACTIVE"],
-        //             "nodal_flags"                        : ["VISITED"],
-        //             "element_data_value_variables"       : [],
-        //             "condition_data_value_variables"     : []
-        //         }
-        //         )");
-
-        // VtkOutput vtk_output(rSkinModelPart, vtk_parameters);
-        //vtk_output.PrintOutput();
 
 #ifdef KRATOS_USING_MPI
         rSkinModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
@@ -114,6 +94,7 @@ public:
         if (r_comm.IsDistributed())
         {
             DistanceCalculationUtility::GatherModelPartOnAllRanks(rSkinModelPart, r_gathered_skin_mp);
+            ParallelFillCommunicator(r_gathered_skin_mp).Execute();
         }
         r_comm.Barrier();
 #endif
@@ -296,7 +277,7 @@ public:
         if (r_comm.IsDistributed())
         {
 #ifdef KRATOS_USING_MPI
-           ParallelFillCommunicator(rGatheredModelPart).Execute();
+           // ParallelFillCommunicator(rGatheredModelPart).Execute();
 #endif
         }
     }
