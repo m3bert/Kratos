@@ -164,7 +164,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     {
         rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
 #ifdef KRATOS_USING_MPI
-        ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
+        // ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
 #endif
     }
 
