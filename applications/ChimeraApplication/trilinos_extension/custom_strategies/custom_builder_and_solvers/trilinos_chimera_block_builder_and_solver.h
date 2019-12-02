@@ -361,7 +361,7 @@ public:
         ModelPart &rModelPart,
         TSystemMatrixType &rA,
         TSystemVectorType &rDx,
-        TSystemVectorType &rb)
+        TSystemVectorType &rb) override
     {
         KRATOS_TRY
 
@@ -576,8 +576,6 @@ public:
     void SetUpDofSet(typename TSchemeType::Pointer pScheme, ModelPart &rModelPart) override
     {
         KRATOS_TRY
-        const DataCommunicator &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
-        int mpi_rank = r_comm.Rank();
         typedef Element::DofsVectorType DofsVectorType;
         // Gets the array of elements from the modeler
         ElementsArrayType &r_elements_array =
@@ -719,7 +717,7 @@ public:
                                                    TSystemMatrixPointerType &rpA,
                                                    TSystemVectorPointerType &rpDx,
                                                    TSystemVectorPointerType &rpb,
-                                                   ModelPart &rModelPart)
+                                                   ModelPart &rModelPart) override
     {
         // resizing the system vectors and matrix
         if (rpA == nullptr || TSparseSpace::Size1(*rpA) == 0 ||
@@ -1115,8 +1113,6 @@ protected:
         KRATOS_INFO_ALL_RANKS("#### Total number of global constraints : ")<<r_comm.SumAll(num_local)<<std::endl;
         KRATOS_INFO_ALL_RANKS("#### Number of local global constraints : ")<<num_local<<" number assembled : "<<assembled_count <<std::endl;
 
-        const double stop_formulate = OpenMPUtils::GetCurrentTime();
-
         KRATOS_CATCH("TrilinosChimeraBlockBuilderAndSolver::FormulateGlobalMasterSlaveRelations failed ..");
     }
 
@@ -1288,12 +1284,6 @@ protected:
         IndexType slave_equation_id = 0;
         EquationIdVectorType master_equation_ids = EquationIdVectorType(0);
         DofsVectorType slave_dof_list, master_dof_list;
-        const int total_system_size = TSparseSpace::Size(rDx);
-
-        // Getting the array of the conditions
-        const int number_of_constraints = static_cast<int>(rModelPart.MasterSlaveConstraints().size());
-        // Getting the beginning iterator
-        const ModelPart::MasterSlaveConstraintContainerType::iterator constraints_begin = rModelPart.MasterSlaveConstraintsBegin();
 
         for (int i_constraints = 0; i_constraints < number_of_global_constraints; i_constraints++)
         {

@@ -682,7 +682,6 @@ private:
         VectorType master_weights_vector;
         double slave_constant;
         VectorType master_weights_vector_other;
-        double constant_other;
 
         for (auto& slave_index : mLocalIndices.slave_index_vector) { // Loop over all the slaves for this container
             // Get the global equation for this constraint
@@ -691,29 +690,30 @@ private:
             global_master_slave_constraint->second->EquationIdsVector(slave_equation_id, master_equation_ids);
             global_master_slave_constraint->second->CalculateLocalSystem(master_weights_vector, slave_constant);
 
-            IndexType master_index = 0;
-            double master_weight = 0.0;
-            IndexType i_master = 0;
-            for (auto&  master_eq_id : master_equation_ids)
-            { // Loop over all the masters the slave has
-                master_index = std::distance(rEquationIds.begin(), std::find(rEquationIds.begin(), rEquationIds.end(), master_eq_id));
-                //master_weight = mTransformationMatrixLocal(slave_index,master_index);
-                master_weight = master_weights_vector(i_master);
-                for (auto& internal_index : mLocalIndices.internal_index_vector) {
-                    rRHSContribution(internal_index) -= rLHSContribution(internal_index, slave_index) * slave_constant;
-                }
-                // For RHS(m) += A'*LHS(s,s)*B
-                // for (auto& slave_index_other : mLocalIndices.slave_index_vector) {
-                //     auto global_master_slave_constraint_other = mrGlobalMasterSlaveConstraints.find(rEquationIds[slave_index_other]);
-                //     global_master_slave_constraint_other->second->CalculateLocalSystem(master_weights_vector_other, constant_other);
-                //     // rRHSContribution(master_index) -= rLHSContribution(slave_index, slave_index_other) * master_weight * constant_other;
-                // }
-                // Changing the RHS side of the equation
-                // rRHSContribution(master_index) += master_weight * rRHSContribution(slave_index);
-                // rRHSContribution(master_index) -= rLHSContribution(master_index, slave_index) * slave_constant;
+            for (auto& internal_index : mLocalIndices.internal_index_vector) {
+                rRHSContribution(internal_index) -= rLHSContribution(internal_index, slave_index) * slave_constant;
+            }
 
-                i_master++;
-            } // Loop over all the masters the slave has
+            // IndexType master_index = 0;
+            // double master_weight = 0.0;
+            // IndexType i_master = 0;
+            // for (auto&  master_eq_id : master_equation_ids)
+            // { // Loop over all the masters the slave has
+            //     // master_index = std::distance(rEquationIds.begin(), std::find(rEquationIds.begin(), rEquationIds.end(), master_eq_id));
+            //     //master_weight = mTransformationMatrixLocal(slave_index,master_index);
+            //     // master_weight = master_weights_vector(i_master);
+            //     // For RHS(m) += A'*LHS(s,s)*B
+            //     // for (auto& slave_index_other : mLocalIndices.slave_index_vector) {
+            //     //     auto global_master_slave_constraint_other = mrGlobalMasterSlaveConstraints.find(rEquationIds[slave_index_other]);
+            //     //     global_master_slave_constraint_other->second->CalculateLocalSystem(master_weights_vector_other, constant_other);
+            //     //     // rRHSContribution(master_index) -= rLHSContribution(slave_index, slave_index_other) * master_weight * constant_other;
+            //     // }
+            //     // Changing the RHS side of the equation
+            //     // rRHSContribution(master_index) += master_weight * rRHSContribution(slave_index);
+            //     // rRHSContribution(master_index) -= rLHSContribution(master_index, slave_index) * slave_constant;
+
+            //     i_master++;
+            // } // Loop over all the masters the slave has
 
             rRHSContribution(slave_index) = 0.0;
         }
