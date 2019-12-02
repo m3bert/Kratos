@@ -17,15 +17,24 @@ file(
   ${CMAKE_CURRENT_SOURCE_DIR}/custom_python/*.cpp
 )
 
+file(
+  GLOB_RECURSE
+  TRILINOS_TEST_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/custom_utilities/trilinos_test.cpp
+)
+
+
 ## Python module
 pybind11_add_module( KratosChimeraTrilinosExtension MODULE THIN_LTO ${KRATOS_CHIMERA_TRILINOS_EXTENSION_PYTHON_INTERFACE_SOURCES} )
 if(USE_COTIRE MATCHES ON)
-  set_target_properties(KratosChimeraTrilinosExtension PROPERTIES COTIRE_UNITY_LINK_LIBRARIES_INIT "COPY_UNITY")
-  cotire(KratosChimeraTrilinosExtension)
+set_target_properties(KratosChimeraTrilinosExtension PROPERTIES COTIRE_UNITY_LINK_LIBRARIES_INIT "COPY_UNITY")
+cotire(KratosChimeraTrilinosExtension)
 endif(USE_COTIRE MATCHES ON)
 target_link_libraries( KratosChimeraTrilinosExtension PRIVATE KratosChimeraApplicationCore KratosTrilinosCore KratosMPICore ${TRILINOS_LIBRARIES})
 set_target_properties( KratosChimeraTrilinosExtension PROPERTIES PREFIX "")
 
+add_executable (trilinos_test ${TRILINOS_TEST_SOURCES})
+target_link_libraries (trilinos_test PRIVATE KratosTrilinosCore KratosMPICore ${TRILINOS_LIBRARIES})
 ###############################################################################
 # changing the .dll suffix to .pyd
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
