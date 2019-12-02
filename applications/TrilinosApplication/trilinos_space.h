@@ -496,16 +496,17 @@ public:
     static void GatherValues(const VectorType& rX, const std::vector<int>& IndexArray, double* pValues)
     {
         KRATOS_TRY
-        double tot_size = IndexArray.size();
+
+        IndexType tot_size = IndexArray.size();
 
         //defining a map as needed
-        Epetra_Map dof_update_map(-1, tot_size, &(*(IndexArray.begin())), 0, rX.Comm());
-
-        //defining the importer class
-        Epetra_Import importer(dof_update_map, rX.Map());
-
+        const Epetra_Map target_map(-1, tot_size, IndexArray.data(), 0, rX.Comm());
         //defining a temporary vector to gather all of the values needed
-        Epetra_Vector temp(importer.TargetMap());
+        Epetra_Vector temp(target_map);
+
+        const auto& r_source_map = rX.Map();
+        //defining the importer class
+        Epetra_Import importer(target_map, r_source_map);
 
         //importing in the new temp vector the values
         int ierr = temp.Import(rX, importer, Insert);
