@@ -446,41 +446,7 @@ public:
     {
         KRATOS_TRY
 
-        if (mGlobalMasterSlaveConstraints.size() > 0)
-        {
-            BuildAndSolveWithConstraints(pScheme, rModelPart, rA, rDx, rb);
-        }
-        else
-        {
-            if (BaseType::GetEchoLevel() > 0)
-                START_TIMER("Build", 0)
-
-            Build(pScheme, rModelPart, rA, rb);
-
-            if (BaseType::GetEchoLevel() > 0)
-                STOP_TIMER("Build", 0)
-
-            // apply dirichlet conditions
-            ApplyDirichletConditions(pScheme, rModelPart, rA, rDx, rb);
-
-            KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
-                << "\nBefore the solution of the system"
-                << "\nSystem Matrix = " << rA << "\nunknowns vector = " << rDx
-                << "\nRHS vector = " << rb << std::endl;
-
-            if (BaseType::GetEchoLevel() > 0)
-                START_TIMER("System solve time ", 0)
-
-            SystemSolveWithPhysics(rA, rDx, rb, rModelPart);
-
-            if (BaseType::GetEchoLevel() > 0)
-                STOP_TIMER("System solve time ", 0)
-
-            KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
-                << "\nAfter the solution of the system"
-                << "\nSystem Matrix = " << rA << "\nUnknowns vector = " << rDx
-                << "\nRHS vector = " << rb << std::endl;
-        }
+        BuildAndSolveWithConstraints(pScheme, rModelPart, rA, rDx, rb);
 
         KRATOS_CATCH("")
     }
