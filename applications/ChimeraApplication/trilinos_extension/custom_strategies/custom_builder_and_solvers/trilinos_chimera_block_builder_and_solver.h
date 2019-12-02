@@ -133,6 +133,8 @@ public:
     typedef Node<3> NodeType;
     typedef typename NodeType::DofType DofType;
     typedef DofType::Pointer DofPointerType;
+    /// The DoF pointer vector type definition
+    typedef std::vector< DofType::Pointer > DofPointerVectorType;
 
     ///@}
     ///@name Life Cycle
@@ -188,10 +190,9 @@ public:
 
         // Getting process info
         const ProcessInfo &r_process_info = rModelPart.GetProcessInfo();
-
         // Computing constraints
         const int n_constraints = static_cast<int>(rModelPart.MasterSlaveConstraints().size());
-        auto constraints_begin = rModelPart.MasterSlaveConstraintsBegin();
+        const auto constraints_begin = rModelPart.MasterSlaveConstraintsBegin();
 #pragma omp parallel for schedule(guided, 512) firstprivate(n_constraints, constraints_begin)
         for (int k = 0; k < n_constraints; ++k)
         {
@@ -226,20 +227,6 @@ public:
             it->FinalizeSolutionStep(r_process_info);
         }
     }
-
-    // /**
-    //  * @brief This function is intended to be called at the end of the solution step to clean up memory storage not needed
-    //  */
-    // void Clear() override
-    // {
-    //     BaseType::Clear();
-
-    //     mSlaveIds.clear();
-    //     mMasterIds.clear();
-    //     mInactiveSlaveDofs.clear();
-    //     mT.resize(0,0,false);
-    //     mConstantVector.resize(0,false);
-    // }
 
     /**
      * @brief Function to perform the build the system matrix and the residual
@@ -585,7 +572,8 @@ public:
     void SetUpDofSet(typename TSchemeType::Pointer pScheme, ModelPart &rModelPart) override
     {
         KRATOS_TRY
-
+        const DataCommunicator &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
+        int mpi_rank = r_comm.Rank();
         typedef Element::DofsVectorType DofsVectorType;
         // Gets the array of elements from the modeler
         ElementsArrayType &r_elements_array =
@@ -616,31 +604,6 @@ public:
             for (typename DofsVectorType::iterator i_dof = dof_list.begin();
                  i_dof != dof_list.end(); ++i_dof)
                 temp_dofs_array.push_back(*i_dof);
-        }
-
-        // Taking dofs of constraints
-
-        DofsVectorType slave_dof_list, master_dof_list;
-        auto &r_constraints_array = rModelPart.MasterSlaveConstraints();
-        const int nconstraints = static_cast<int>(r_constraints_array.size());
-        for (int i = 0; i < nconstraints; i++)
-        {
-            auto it = r_constraints_array.begin() + i;
-            // KRATOS_INFO_IF_ALL_RANKS("slave dof : ", true)<<(*it)<<std::endl;
-            // gets list of Dof involved on every constraint
-            it->GetDofList(slave_dof_list, master_dof_list, r_current_process_info);
-
-            for (typename DofsVectorType::iterator i_dof = slave_dof_list.begin();
-                 i_dof != slave_dof_list.end(); ++i_dof)
-            {
-                temp_dofs_array.push_back(*i_dof);
-            }
-
-            for (typename DofsVectorType::iterator i_dof = master_dof_list.begin();
-                 i_dof != master_dof_list.end(); ++i_dof)
-            {
-                temp_dofs_array.push_back(*i_dof);
-            }
         }
 
         temp_dofs_array.Unique();
@@ -1357,9 +1320,12 @@ protected:
     void FormulateGlobalMasterSlaveRelations(ModelPart &rModelPart)
     {
         KRATOS_TRY
+        MasterSlaveConstraintType::DofPointerVectorType slave_dofs_vector;
+        MasterSlaveConstraintType::DofPointerVectorType master_dofs_vector;
         const double start_formulate = OpenMPUtils::GetCurrentTime();
         // First delete the existing ones
         mGlobalMasterSlaveConstraints.clear();
+        int assembled_count = 0;
         // Getting the array of the conditions
         const int number_of_constraints = static_cast<int>(rModelPart.MasterSlaveConstraints().size());
         // Getting the beginning iterator
@@ -1381,8 +1347,21 @@ protected:
             {
                 //assemble the Constraint contribution
                 AssembleConstraint(*it, r_current_process_info);
+                // it->GetDofList(slave_dofs_vector, master_dofs_vector, r_current_process_info);
+                // int node_id = slave_dofs_vector[0]->Id();
+                // auto p_node = (rModelPart.Nodes()(node_id));
+                // KRATOS_INFO_ALL_RANKS("#### slave node id : ")<<node_id<<"  ,  is slave ; "<<p_node->Is(SLAVE)
+                //                                                         <<" PARTITION_ INDEX : "<<p_node->GetSolutionStepValue(PARTITION_INDEX)<<std::endl;
+
+                ++assembled_count;
             }
         }
+
+        const DataCommunicator& r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
+        int num_local = mGlobalMasterSlaveConstraints.size();
+        KRATOS_INFO_ALL_RANKS("#### Total number of global constraints : ")<<r_comm.SumAll(num_local)<<std::endl;
+        KRATOS_INFO_ALL_RANKS("#### Number of local global constraints : ")<<num_local<<" number assembled : "<<assembled_count <<std::endl;
+
         const double stop_formulate = OpenMPUtils::GetCurrentTime();
         KRATOS_INFO_IF("TrilinosChimeraBlockBuilderAndSolver", (this->GetEchoLevel() >= 1 && rModelPart.GetCommunicator().MyPID() == 0)) << "Formulate global constraints time: " << stop_formulate - start_formulate << std::endl;
 
@@ -1457,6 +1436,8 @@ protected:
     void UpdateConstraintsForBuilding(ModelPart &rModelPart)
     {
         KRATOS_TRY
+        Communicator& r_comm = rModelPart.GetCommunicator();
+        r_comm.SynchronizeNodalSolutionStepsData();
         // Reset the constraint equations
         ResetConstraintRelations();
         // Getting the array of the conditions
@@ -1539,38 +1520,58 @@ protected:
         TSystemVectorType &rb)
     {
         KRATOS_TRY
-        const int number_of_constraints = static_cast<int>(mGlobalMasterSlaveConstraints.size());
+        const int number_of_global_constraints = static_cast<int>(mGlobalMasterSlaveConstraints.size());
         // Getting the beginning iterator
 
-        const GlobalMasterSlaveRelationContainerType::iterator constraints_begin = mGlobalMasterSlaveConstraints.begin();
+        const GlobalMasterSlaveRelationContainerType::iterator global_constraints_begin = mGlobalMasterSlaveConstraints.begin();
         //contributions to the system
         VectorType master_weights_vector;
         double constant = 0.0;
+        const int num_local_elems = rDx.MyLength();
+        // std::vector<int> ids_to_gather(num_local_elems, 0);
         std::vector<int> ids_to_gather;
-        ids_to_gather.reserve(TSparseSpace::Size(rDx));
+        ids_to_gather.reserve(num_local_elems);
+        // rDx.Map().MyGlobalElements(&ids_to_gather[0]);
 
         IndexType slave_equation_id = 0;
         EquationIdVectorType master_equation_ids = EquationIdVectorType(0);
+        DofsVectorType slave_dof_list, master_dof_list;
+        const int total_system_size = TSparseSpace::Size(rDx);
 
-        for (int i_constraints = 0; i_constraints < number_of_constraints; i_constraints++)
+        // Getting the array of the conditions
+        const int number_of_constraints = static_cast<int>(rModelPart.MasterSlaveConstraints().size());
+        // Getting the beginning iterator
+        const ModelPart::MasterSlaveConstraintContainerType::iterator constraints_begin = rModelPart.MasterSlaveConstraintsBegin();
+
+        for (int i_constraints = 0; i_constraints < number_of_global_constraints; i_constraints++)
         {
-            GlobalMasterSlaveRelationContainerType::iterator it = constraints_begin;
+            GlobalMasterSlaveRelationContainerType::iterator it = global_constraints_begin;
             std::advance(it, i_constraints);
+
+            //get the equation Ids of the constraint
             (it->second)->EquationIdsVector(slave_equation_id, master_equation_ids);
-            for (auto &master_equation_id : master_equation_ids)
-                ids_to_gather.push_back(master_equation_id);
+            for(const auto& master_eq_id : master_equation_ids){
+                ids_to_gather.push_back( master_eq_id );
+            }
         }
         ids_to_gather.shrink_to_fit();
 
+        // Here we should remove the duplicates in ids_to_gather otherwise it will segfault
+        std::sort(ids_to_gather.begin(), ids_to_gather.end());
+        ids_to_gather.erase( std::unique( ids_to_gather.begin(), ids_to_gather.end() ), ids_to_gather.end() );
         double gathered_values[ids_to_gather.size()];
         TSparseSpace::GatherValues(rDx, ids_to_gather, gathered_values);
 
-        KRATOS_INFO_IF_ALL_RANKS("Size of ids_to_gather : ", true) << ids_to_gather.size() << std::endl;
+        std::vector<int> slave_eq_ids;
+        slave_eq_ids.reserve(number_of_global_constraints);
+        std::vector<double> slave_values;
+        slave_values.reserve(number_of_global_constraints);
 
-        for (int i_constraints = 0; i_constraints < number_of_constraints; i_constraints++)
+        for (int i_constraints = 0; i_constraints < number_of_global_constraints; i_constraints++)
         {
-            GlobalMasterSlaveRelationContainerType::iterator it = constraints_begin;
+            GlobalMasterSlaveRelationContainerType::iterator it = global_constraints_begin;
             std::advance(it, i_constraints);
+            // (it->second)->PrintInfo(std::cout);
 
             double slave_dx_value = 0.0;
             //get the equation Ids of the constraint
@@ -1582,20 +1583,24 @@ protected:
             {
                 auto result = FindInVector(ids_to_gather, static_cast<int>(master_equation_id));
                 double master_value = 0.0;
-                if(result.first)
-                    master_value = gathered_values[result.second];
+                if(result.first) // This is a remote master
+                     master_value = gathered_values[result.second];
+                else // This is a local master
+                    KRATOS_INFO_ALL_RANKS("3. master not found              : ")<<master_equation_id<<std::endl;
+
                 slave_dx_value += master_value * master_weights_vector(master_index);
                 master_index++;
             }
             slave_dx_value += constant;
             const int  slave_eq_id = static_cast<int>(slave_equation_id);
-
-            // TSparseSpace::SetValue(rDx, slave_eq_id, slave_dx_value);
-            int ierr = rDx.ReplaceGlobalValues (1, &slave_eq_id, &slave_dx_value);
-            KRATOS_ERROR_IF(ierr < 0) << "Epetra failure when attempting to ReplaceGlobalValues in ReconstructSlave function." << std::endl;
+            slave_values.push_back(slave_dx_value);
+            slave_eq_ids.push_back(slave_eq_id);
+            // KRATOS_INFO_ALL_RANKS("slave dx value : ")<<slave_dx_value<<std::endl;
         }
+        int ierr = rDx.ReplaceGlobalValues (number_of_global_constraints, slave_eq_ids.data(), slave_values.data());
+        KRATOS_ERROR_IF(ierr < 0) << "Epetra failure when attempting to ReplaceGlobalValues in ReconstructSlave function." << std::endl;
 
-        int ierr = rDx.GlobalAssemble(Insert,true); //Epetra_CombineMode mode=Add);
+        ierr = rDx.GlobalAssemble(Insert); //Epetra_CombineMode mode=Add);
         KRATOS_ERROR_IF(ierr < 0) << "Epetra failure when attempting to insert value in function SetValue" << std::endl;
 
         KRATOS_CATCH("TrilinosChimeraBlockBuilderAndSolver::ReconstructSlaveSolutionAfterSolve failed ..");

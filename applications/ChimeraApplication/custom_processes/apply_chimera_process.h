@@ -91,6 +91,7 @@ public:
     typedef std::vector<MasterSlaveConstraintContainerType> MasterSlaveContainerVectorType;
     typedef BinBasedFastPointLocator<TDim> PointLocatorType;
     typedef typename PointLocatorType::Pointer PointLocatorPointerType;
+    typedef ModelPart::NodesContainerType NodesContainerType;
 
     KRATOS_CLASS_POINTER_DEFINITION(ApplyChimera);
 
@@ -164,6 +165,7 @@ public:
     virtual void ExecuteInitializeSolutionStep() override
     {
         KRATOS_TRY;
+        VariableUtils().SetFlag(ACTIVE, true, mrMainModelPart.Elements());
         // Actual execution of the functionality of this class
         if (mReformulateEveryStep || !mIsFormulated)
         {
@@ -187,7 +189,6 @@ public:
     {
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Nodes());
         VariableUtils().SetFlag(VISITED, false, mrMainModelPart.Elements());
-        // VariableUtils().SetFlag(ACTIVE, true, mrMainModelPart.Elements());
         VariableUtils().SetNonHistoricalVariable(SPLIT_ELEMENT, false, mrMainModelPart.Elements());
 
         if (mReformulateEveryStep)
@@ -298,7 +299,7 @@ protected:
                         auto &r_boundary_model_part = r_background_model_part.CreateSubModelPart("chimera_boundary_mp");
                         BuiltinTimer extraction_time;
                         ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_background_model_part, r_boundary_model_part);
-                        KRATOS_INFO_IF("ApplyChimera : Extraction of boundary mesh took         : ", mEchoLevel > 0) << extraction_time.ElapsedSeconds() << " seconds" << std::endl;
+                        KRATOS_INFO_IF("ApplyChimera : Extraction of boundary mesh took          : ", mEchoLevel > 0) << extraction_time.ElapsedSeconds() << " seconds" << std::endl;
                     }
                 }
                 for (IndexType i_slave_level = i_current_level + 1; i_slave_level < mNumberOfLevels; ++i_slave_level)
@@ -306,7 +307,7 @@ protected:
                     for (auto &slave_patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
                     {
                         slave_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
-                        KRATOS_INFO_IF("ApplyChimera : Formulating Chimera for the combination : ", mEchoLevel > 0) << "Background\n" << background_patch_param << "\n Patch \n" << slave_patch_param << std::endl;
+                        KRATOS_INFO_IF("ApplyChimera : Formulating Chimera for the combination   : ", mEchoLevel > 0) << "Background\n" << background_patch_param << "\n Patch \n" << slave_patch_param << std::endl;
                         if (i_current_level == 0) // a check to identify computational Domain boundary
                             domain_type = ChimeraHoleCuttingUtility::Domain::OTHER;
                         FormulateChimera(background_patch_param, slave_patch_param, domain_type);
@@ -322,10 +323,10 @@ protected:
 
         const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         double chimera_elased_seconds = do_chimera_loop_time.ElapsedSeconds();
-        KRATOS_INFO_IF("ApplyChimera : Chrimera Initialization took                 : ", mEchoLevel > 0)<< r_comm.Max(chimera_elased_seconds, 0) << " seconds" << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Chrimera Initialization took              : ", mEchoLevel > 0)<< r_comm.Max(chimera_elased_seconds, 0) << " seconds" << std::endl;
         int num_local_constraints = mrMainModelPart.NumberOfMasterSlaveConstraints();
 
-        KRATOS_INFO_IF("ApplyChimera : Total number of constraints created so far   :", mEchoLevel > 0) << r_comm.Sum(num_local_constraints, 0) << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Total number of constraints created so far:", mEchoLevel > 0) << r_comm.Sum(num_local_constraints, 0) << std::endl;
     }
 
     /**
@@ -352,7 +353,7 @@ protected:
         PointLocatorPointerType p_point_locator_on_background = GetPointLocator(r_background_search_model_part);
         PointLocatorPointerType p_pointer_locator_on_patch = GetPointLocator(r_patch_model_part);
         auto elapsed_search_creation_time = search_creation_time.ElapsedSeconds();
-        KRATOS_INFO_IF("ApplyChimera : Creation of search structures took       : ", mEchoLevel > 0) << r_comm.Max(elapsed_search_creation_time, 0) << " seconds" << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Creation of search structures took        : ", mEchoLevel > 0) << r_comm.Max(elapsed_search_creation_time, 0) << " seconds" << std::endl;
         KRATOS_ERROR_IF(over_lap_distance < 1e-12) << "Overlap distance should be a positive and non-zero number." << std::endl;
 
         ModelPart &r_hole_model_part = current_model.CreateModelPart("HoleModelpart");
@@ -367,12 +368,12 @@ protected:
         DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::CalculateDistance(r_background_model_part,
                                                                                                r_modified_patch_boundary_model_part);
         auto bg_distance_calc_time_elapsed = bg_distance_calc_time.ElapsedSeconds();
-        KRATOS_INFO_IF("ApplyChimera : Distance calculation on background took  : ", mEchoLevel > 0) << r_comm.Max(bg_distance_calc_time_elapsed, 0) << " seconds" << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Distance calculation on background took   : ", mEchoLevel > 0) << r_comm.Max(bg_distance_calc_time_elapsed, 0) << " seconds" << std::endl;
 
         BuiltinTimer hole_creation_time;
         ChimeraHoleCuttingUtility().CreateHoleAfterDistance<TDim>(r_background_model_part, r_hole_model_part, r_hole_boundary_model_part, over_lap_distance);
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
-        KRATOS_INFO_IF("ApplyChimera : Hole creation took                       : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Hole creation took                        : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
         // WriteModelPart(r_hole_model_part);
         // WriteModelPart(r_background_model_part);
@@ -389,10 +390,10 @@ protected:
         }
 
         BuiltinTimer mpc_time;
-        // ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
-        // ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
+        ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
+        ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
-        KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took         : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
+        KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took          : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
 
         current_model.DeleteModelPart("HoleModelpart");
         current_model.DeleteModelPart("HoleBoundaryModelPart");
@@ -458,6 +459,7 @@ protected:
         rSlaveNode.Set(SLAVE);
         ModelPart::MasterSlaveConstraintType::Pointer p_new_constraint = rCloneConstraint.Create(ConstraintId, rMasterNode, rMasterVariable, rSlaveNode, rSlaveVariable, Weight, Constant);
         p_new_constraint->Set(TO_ERASE);
+        p_new_constraint->SetValue(PARTITION_INDEX, rSlaveNode.GetSolutionStepValue(PARTITION_INDEX) );
         mNodeIdToConstraintIdsMap[rSlaveNode.Id()].push_back(ConstraintId);
         //TODO: Check if an insert(does a sort) is required here or just use a push_back and then
         //      sort once at the end.
@@ -483,14 +485,16 @@ protected:
                                     std::vector<int> &rConstraintIdVector,
                                     MasterSlaveConstraintContainerType &rMsContainer)
     {
-        const auto &r_clone_constraint = (LinearMasterSlaveConstraint)KratosComponents<MasterSlaveConstraint>::Get("LinearMasterSlaveConstraint");
+        // const auto &r_clone_constraint = (LinearMasterSlaveConstraint)KratosComponents<MasterSlaveConstraint>::Get("LinearMasterSlaveConstraint");
+        const auto &r_clone_constraint = new LinearMasterSlaveConstraint();
         // Initialise the boundary nodes dofs to 0 at ever time steps
         rBoundaryNode.FastGetSolutionStepValue(rVariable, 0) = 0.0;
+
         for (std::size_t i = 0; i < rGeometry.size(); i++)
         {
             //Interpolation of rVariable
             rBoundaryNode.FastGetSolutionStepValue(rVariable, 0) += rGeometry[i].GetDof(rVariable).GetSolutionStepValue(0) * rShapeFuncWeights[i];
-            AddMasterSlaveRelation(rMsContainer, r_clone_constraint, rConstraintIdVector[StartIndex++], rGeometry[i], rVariable, rBoundaryNode, rVariable, rShapeFuncWeights[i]);
+            AddMasterSlaveRelation(rMsContainer, *r_clone_constraint, rConstraintIdVector[StartIndex++], rGeometry[i], rVariable, rBoundaryNode, rVariable, rShapeFuncWeights[i]);
         } // end of loop over host element nodes
 
         // Setting the buffer 1 same buffer 0
@@ -576,7 +580,9 @@ protected:
                               MasterSlaveContainerVectorType &rPressureMasterSlaveContainerVector)
     {
         const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
-        const int mpi_rank = r_comm.Rank();
+        int mpi_rank = r_comm.Rank();
+        int mpi_size = r_comm.Size();
+        std::vector<NodesContainerType> SendNodes(mpi_size);
         Model &current_model = mrMainModelPart.GetModel();
         auto& gathered_modelpart = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredBoundary") : rModelPart;
         if(r_comm.IsDistributed())
@@ -587,7 +593,6 @@ protected:
         std::vector<int> constraints_id_vector;
         int num_constraints_required = (TDim + 1) * (gathered_modelpart.Nodes().size());
         CreateConstraintIds(constraints_id_vector, num_constraints_required);
-        auto& r_nodes = mrMainModelPart.Nodes();
 
         IndexType found_counter = 0;
         std::vector<IndexType> nodes_to_add;
@@ -600,20 +605,30 @@ protected:
             auto &ms_pressure_container = rPressureMasterSlaveContainerVector[omp_get_thread_num()];
 
             ModelPart::NodesContainerType::iterator i_boundary_node = gathered_modelpart.NodesBegin() + i_bn;
-            NodeType::Pointer p_boundary_node = *(i_boundary_node.base());
+            NodeType& r_boundary_node = *( *(i_boundary_node.base()) );
+            const int node_p_index = r_boundary_node.GetSolutionStepValue(PARTITION_INDEX);
             unsigned int start_constraint_id = i_bn * (TDim + 1) * (TDim + 1);
-            bool is_found = SearchNodeAndMakeConstraints(p_boundary_node, rBinLocator, ms_velocity_container, ms_pressure_container,
-                                                         constraints_id_vector, start_constraint_id);
-            if (is_found)
+            Element::Pointer r_host_element;
+            Vector weights;
+            bool is_found = SearchNode(rBinLocator, r_boundary_node, r_host_element, weights);
+            if (is_found){
+                MakeConstraints(r_boundary_node, r_host_element, weights, ms_velocity_container, ms_pressure_container,
+                                                            constraints_id_vector, start_constraint_id);
                 found_counter += 1;
+                if(node_p_index != mpi_rank){
+                    auto p_geom = r_host_element->GetGeometry();
+                    for(auto p_node=p_geom.ptr_begin(); p_node != p_geom.ptr_end(); ++p_node)
+                        SendNodes[node_p_index].push_back(*p_node);
+                }
+            }
         }
 
         if (r_comm.IsDistributed())
         {
-#ifdef KRATOS_USING_MPI
-        ParallelFillCommunicator(mrMainModelPart).Execute();
-        current_model.DeleteModelPart("GatheredBoundary");
-#endif
+            SynchronizeNodes(mrMainModelPart, SendNodes);
+            SynchronizeConstraints(rVelocityMasterSlaveContainerVector);
+            SynchronizeConstraints(rPressureMasterSlaveContainerVector);
+            current_model.DeleteModelPart("GatheredBoundary");
         }
 
         double loop_time = loop_over_b_nodes.ElapsedSeconds();
@@ -625,6 +640,111 @@ protected:
         KRATOS_INFO_IF("ApplyChimera : Number of constraints made                : ", mEchoLevel > 1) << global_num_found*9 << std::endl;
     }
 
+    void SynchronizeConstraints(MasterSlaveContainerVectorType& rConstraintsContainterVector)
+    {
+        ProcessInfo &r_current_process_info = mrMainModelPart.GetProcessInfo();
+        const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
+        auto& r_nodes = mrMainModelPart.Nodes();
+        int mpi_size = r_comm.Size();
+        int mpi_rank = r_comm.Rank();
+        MasterSlaveContainerVectorType send_constraints(mpi_size);
+        MasterSlaveContainerVectorType recv_constraints(mpi_size);
+        for(auto& constraints_container : rConstraintsContainterVector){
+            for(auto p_constraint=constraints_container.ptr_begin(); p_constraint!=constraints_container.ptr_end(); ++p_constraint){
+                int const_rank = (*p_constraint)->GetValue(PARTITION_INDEX);
+                if(const_rank != mpi_rank){
+                    send_constraints[const_rank].push_back(*p_constraint);
+                }
+            }
+        }
+        mrMainModelPart.GetCommunicator().TransferObjects(send_constraints, recv_constraints);
+
+        for(auto& constraints_container : send_constraints){
+            for(auto p_constraint=constraints_container.ptr_begin(); p_constraint!=constraints_container.ptr_end(); ++p_constraint){
+                rConstraintsContainterVector[0].erase((*p_constraint)->Id()); // IMPORTANT: This means no hybrid parallism
+            }
+        }
+        typedef Element::DofsVectorType DofsVectorType;
+
+        auto& constraints_container = rConstraintsContainterVector[0]; // This does not matter for OMP and MPI hybrid parallism
+        for(auto& recv_constraints_container : recv_constraints)
+        {
+            for(auto p_constraint=recv_constraints_container.ptr_begin(); p_constraint!=recv_constraints_container.ptr_end(); ++p_constraint){
+                DofsVectorType slave_dof_list, master_dof_list, new_master_dof_list, new_slave_dof_list;
+                (*p_constraint)->GetDofList(slave_dof_list, master_dof_list, r_current_process_info);
+                for(auto master_dof : master_dof_list){
+                    const int master_node_id = master_dof->Id();
+                    auto it_master_node = r_nodes.find(master_node_id);
+                    if( it_master_node != r_nodes.end()){
+                        if((*it_master_node).GetSolutionStepValue(PARTITION_INDEX) != mpi_rank){
+                            auto& r_master_variable = master_dof->GetVariable();
+                            auto p_new_master = (*it_master_node).pGetDof(r_master_variable);
+                            new_master_dof_list.push_back(p_new_master);
+                        }else{
+                            new_master_dof_list.push_back(master_dof);
+                        }
+                    }
+                }
+                (*p_constraint)->SetMasterDofsVector(new_master_dof_list);
+
+                for(auto slave_dof : slave_dof_list){
+                    const int slave_node_id = slave_dof->Id();
+                    auto it_slave_node = r_nodes.find(slave_node_id);
+                    if( it_slave_node != r_nodes.end()){
+                        if((*it_slave_node).GetSolutionStepValue(PARTITION_INDEX) != mpi_rank){
+                            KRATOS_ERROR<<"A slave which do not belong to this partition "<<mpi_rank<<" is received !"<<std::endl;
+                        }else{
+                            auto& r_slave_variable = slave_dof->GetVariable();
+                            auto p_new_slave = (*it_slave_node).pGetDof(r_slave_variable);
+                            (*it_slave_node).Set(SLAVE);
+                            new_slave_dof_list.push_back(p_new_slave);
+                        }
+                    } else {
+                        KRATOS_ERROR<<"A slave which do not belong to this partition "<<mpi_rank<<" is received !"<<std::endl;
+                    }
+                }
+                (*p_constraint)->SetSlaveDofsVector(new_slave_dof_list);
+
+
+                constraints_container.push_back(*p_constraint);
+            }
+        }
+    }
+
+
+    void SynchronizeNodes(ModelPart& rModelpart, std::vector<NodesContainerType>& rSendNodes)
+    {
+        const DataCommunicator &r_comm = rModelpart.GetCommunicator().GetDataCommunicator();
+        int mpi_size = r_comm.Size();
+        std::vector<NodesContainerType> RecvNodes(mpi_size);
+        rModelpart.GetCommunicator().TransferObjects(rSendNodes, RecvNodes);
+        for (unsigned int i = 0; i < RecvNodes.size(); i++)
+        {
+            for (NodesContainerType::iterator it = RecvNodes[i].begin();
+                 it != RecvNodes[i].end(); ++it)
+                if (rModelpart.Nodes().find(it->Id()) ==
+                    rModelpart.Nodes().end()){
+                        auto p_node = *it.base();
+                        const int p_node_p_index = p_node->GetSolutionStepValue(PARTITION_INDEX);
+                        auto p_new_node = mrMainModelPart.CreateNewNode(p_node->Id(), *p_node);
+                        p_new_node->AddDof(VELOCITY_X, REACTION_X);
+                        p_new_node->AddDof(VELOCITY_Y, REACTION_Y);
+                        p_new_node->AddDof(VELOCITY_Z, REACTION_Z);
+                        p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
+                        p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
+                    }
+        }
+        int temp = rModelpart.Nodes().size();
+        KRATOS_ERROR_IF(temp != int(rModelpart.Nodes().size()))
+            << "the rModelpart has repeated nodes";
+        rSendNodes.clear();
+        RecvNodes.clear();
+        rModelpart.Nodes().Unique();
+
+#ifdef KRATOS_USING_MPI
+        ParallelFillCommunicator(rModelpart).Execute();
+#endif
+    }
     ///@}
     ///@name Protected  Access
     ///@{
@@ -677,19 +797,19 @@ private:
                                                                                                    rBackgroundBoundaryModelpart);
             auto dist_calc_time_elapsed = distance_calc_time_patch.ElapsedSeconds();
             r_comm.Max(dist_calc_time_elapsed, 0);
-            KRATOS_INFO_IF("ApplyChimera : Distance calculation on patch took   : ", mEchoLevel > 0) << dist_calc_time_elapsed << " seconds" << std::endl;
+            KRATOS_INFO_IF("ApplyChimera : Distance calculation on patch took        : ", mEchoLevel > 0) << dist_calc_time_elapsed << " seconds" << std::endl;
             //TODO: Below is brutforce. Check if the boundary of bg is actually cutting the patch.
             BuiltinTimer rem_out_domain_time;
             ChimeraHoleCuttingUtility().RemoveOutOfDomainElements<TDim>(r_patch_model_part, r_modified_patch_model_part, DomainType, ChimeraHoleCuttingUtility::SideToExtract::INSIDE);
             auto rem_out_domain_time_elapsed = rem_out_domain_time.ElapsedSeconds();
             r_comm.Max(rem_out_domain_time_elapsed, 0);
-            KRATOS_INFO_IF("ApplyChimera : Removing out of domain patch took    : ", mEchoLevel > 0) << rem_out_domain_time_elapsed << " seconds" << std::endl;
+            KRATOS_INFO_IF("ApplyChimera : Removing out of domain patch took         : ", mEchoLevel > 0) << rem_out_domain_time_elapsed << " seconds" << std::endl;
 
             BuiltinTimer patch_boundary_extraction_time;
             ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_modified_patch_model_part, r_modified_patch_boundary_model_part);
             auto patch_boundary_extraction_time_elapsed = patch_boundary_extraction_time.ElapsedSeconds();
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
-            KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took    : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
+            KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took         : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
 
             current_model.DeleteModelPart("ModifiedPatch");
             return r_modified_patch_boundary_model_part;
@@ -722,41 +842,31 @@ private:
         }
     }
 
+
     /**
      * @brief Searches for a given node using given locator and adds the velocity
      *        and pressureconstraints to the respecitive containers.
-     * @param pNodeToFind The node which is to be found
      * @param rBinLocator The bin based locator formulated on the background. This is used to locate nodes on rBoundaryModelPart.
-     * @param rVelocityMsConstraintsVector the velocity constraints vector
-     * @param rPressureMsConstraintsVector the pressure constraints vector
-     * @param rConstraintIdVector the vector of constraint ids which are to be used.
-     * @param StartConstraintId the start index of the constraints
+     * @param pNodeToFind The node which is to be found
+     * @param[out] prHostElement The element where the node is found.
+     * @param[out] rWeights the values of the shape functions at the node inside the elements.
      */
-    bool SearchNodeAndMakeConstraints(NodeType::Pointer pNodeToFind, PointLocatorType &rBinLocator,
-                                      MasterSlaveConstraintContainerType &rVelocityMsConstraintsVector,
-                                      MasterSlaveConstraintContainerType &rPressureMsConstraintsVector,
-                                      std::vector<int> &rConstraintIdVector,
-                                      const IndexType StartConstraintId)
+    bool SearchNode(PointLocatorType &rBinLocator, NodeType& rNodeToFind, Element::Pointer& prHostElement, Vector& rWeights)
     {
-        Vector shape_fun_weights;
         const int max_results = 10000;
         typename PointLocatorType::ResultContainerType results(max_results);
         typename PointLocatorType::ResultIteratorType result_begin = results.begin();
-        Element::Pointer p_element;
-        auto& r_nodes = mrMainModelPart.Nodes();
-        const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
-        const int mpi_rank = r_comm.Rank();
 
         bool is_found = false;
-        is_found = rBinLocator.FindPointOnMesh(pNodeToFind->Coordinates(), shape_fun_weights, p_element, result_begin, max_results);
+        is_found = rBinLocator.FindPointOnMesh(rNodeToFind.Coordinates(), rWeights, prHostElement, result_begin, max_results);
 
         bool node_coupled = false;
-        if (pNodeToFind->IsDefined(VISITED))
-            node_coupled = pNodeToFind->Is(VISITED);
+        if (rNodeToFind.IsDefined(VISITED))
+            node_coupled = rNodeToFind.Is(VISITED);
 
         if (node_coupled && is_found)
         {
-            auto &constrainIds_for_the_node = mNodeIdToConstraintIdsMap[pNodeToFind->Id()];
+            auto &constrainIds_for_the_node = mNodeIdToConstraintIdsMap[rNodeToFind.Id()];
             for (auto const &constraint_id : constrainIds_for_the_node)
             {
 #pragma omp critical
@@ -765,51 +875,42 @@ private:
                 }
             }
             constrainIds_for_the_node.clear();
-            pNodeToFind->Set(VISITED, false);
+            rNodeToFind.Set(VISITED, false);
         }
 
-        if (is_found)
-        {
-
-            NodeType::Pointer p_found_node;
-            if(r_comm.IsDistributed()){
-                auto p_index = pNodeToFind->FastGetSolutionStepValue(PARTITION_INDEX);
-                if( p_index != mpi_rank){
-                    auto searched_node_it = r_nodes.find(pNodeToFind->Id());
-                    if(searched_node_it == r_nodes.end()){
-                        auto p_node = mrMainModelPart.CreateNewNode(pNodeToFind->Id(), *pNodeToFind);
-                        p_node->AddDof(VELOCITY_X, REACTION_X);
-                        p_node->AddDof(VELOCITY_Y, REACTION_Y);
-                        p_node->AddDof(VELOCITY_Z, REACTION_Z);
-                        p_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
-                        p_node->GetSolutionStepValue(PARTITION_INDEX) = p_index;
-                        p_found_node = p_node;
-                    }else{
-                        p_found_node = mrMainModelPart.pGetNode(searched_node_it->Id());
-                    }
-                }else{
-                    p_found_node = pNodeToFind;
-                }
-            }else{
-                p_found_node = pNodeToFind;
-            }
-
-
-            Geometry<NodeType> &r_geom = p_element->GetGeometry();
-            int init_index = 0;
-            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_X, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
-            init_index += (TDim + 1);
-            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_Y, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
-            init_index += (TDim + 1);
-            if (TDim == 3)
-            {
-                ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, VELOCITY_Z, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
-                init_index += (TDim + 1);
-            }
-            ApplyContinuityWithElement(r_geom, *p_found_node, shape_fun_weights, PRESSURE, StartConstraintId + init_index, rConstraintIdVector, rPressureMsConstraintsVector);
-            init_index += (TDim + 1);
-        }
         return is_found;
+    }
+
+    /**
+     * @brief Searches for a given node using given locator and adds the velocity
+     *        and pressureconstraints to the respecitive containers.
+     * @param pNodeToFind The node which is to be found
+     * @param pHostElement The element where the node is found.
+     * @param rWeights The weights (#Nodes on host elem) for constraint relations
+     * @param rVelocityMsConstraintsVector the velocity constraints vector
+     * @param rPressureMsConstraintsVector the pressure constraints vector
+     * @param rConstraintIdVector the vector of constraint ids which are to be used.
+     * @param StartConstraintId the start index of the constraints
+     */
+    void MakeConstraints(NodeType& rNodeToFind, Element::Pointer& rHostElement, Vector& rWeights,
+                                      MasterSlaveConstraintContainerType &rVelocityMsConstraintsVector,
+                                      MasterSlaveConstraintContainerType &rPressureMsConstraintsVector,
+                                      std::vector<int> &rConstraintIdVector,
+                                      const IndexType StartConstraintId)
+    {
+        Geometry<NodeType> &r_geom = rHostElement->GetGeometry();
+        int init_index = 0;
+        ApplyContinuityWithElement(r_geom, rNodeToFind, rWeights, VELOCITY_X, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+        init_index += (TDim + 1);
+        ApplyContinuityWithElement(r_geom, rNodeToFind, rWeights, VELOCITY_Y, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+        init_index += (TDim + 1);
+        if (TDim == 3)
+        {
+            ApplyContinuityWithElement(r_geom, rNodeToFind, rWeights, VELOCITY_Z, StartConstraintId + init_index, rConstraintIdVector, rVelocityMsConstraintsVector);
+            init_index += (TDim + 1);
+        }
+        ApplyContinuityWithElement(r_geom, rNodeToFind, rWeights, PRESSURE, StartConstraintId + init_index, rConstraintIdVector, rPressureMsConstraintsVector);
+        init_index += (TDim + 1);
     }
 
 
