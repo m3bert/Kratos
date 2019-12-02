@@ -229,88 +229,6 @@ public:
     }
 
     /**
-     * @brief Function to perform the build the system matrix and the residual
-     * vector
-     * @param pScheme The integration scheme considered
-     * @param rModelPart The model part of the problem to solve
-     * @param rA The LHS matrix
-     * @param rb The RHS vector
-     */
-    void Build(typename TSchemeType::Pointer pScheme,
-               ModelPart &rModelPart,
-               TSystemMatrixType &rA,
-               TSystemVectorType &rb) override
-    {
-        KRATOS_TRY
-
-        KRATOS_ERROR_IF(!pScheme) << "No scheme provided!" << std::endl;
-
-        // Resetting to zero the vector of reactions
-        TSparseSpace::SetToZero(*BaseType::mpReactionsVector);
-
-        // Contributions to the system
-        LocalSystemMatrixType LHS_Contribution = LocalSystemMatrixType(0, 0);
-        LocalSystemVectorType RHS_Contribution = LocalSystemVectorType(0);
-
-        // vector containing the localization in the system of the different terms
-        Element::EquationIdVectorType equation_ids_vector;
-        ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
-        // assemble all elements
-        for (auto it = rModelPart.Elements().ptr_begin(); it < rModelPart.Elements().ptr_end(); it++)
-        {
-            // detect if the element is active or not. If the user did not make
-            // any choice the element is active by default
-            const bool element_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
-
-            if (element_is_active)
-            {
-                // calculate elemental contribution
-                pScheme->CalculateSystemContributions(
-                    *(it), LHS_Contribution, RHS_Contribution,
-                    equation_ids_vector, r_current_process_info);
-
-                // assemble the elemental contribution
-                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
-                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
-
-                // clean local elemental memory
-                pScheme->CleanMemory(*(it));
-            }
-        }
-
-        LHS_Contribution.resize(0, 0, false);
-        RHS_Contribution.resize(0, false);
-
-        // assemble all conditions
-        for (auto it = rModelPart.Conditions().ptr_begin(); it < rModelPart.Conditions().ptr_end(); it++)
-        {
-            // detect if the element is active or not. If the user did not make
-            // any choice the element is active by default
-            const bool condition_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
-            if (condition_is_active)
-            {
-                // calculate elemental contribution
-                pScheme->Condition_CalculateSystemContributions(
-                    *(it), LHS_Contribution, RHS_Contribution,
-                    equation_ids_vector, r_current_process_info);
-
-                // assemble the condition contribution
-                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
-                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
-
-                // clean local elemental memory
-                pScheme->CleanMemory(*(it));
-            }
-        }
-
-        // finalizing the assembly
-        rA.GlobalAssemble();
-        rb.GlobalAssemble();
-
-        KRATOS_CATCH("")
-    }
-
-    /**
      * @brief Function to perform the building of the LHS
      * @details Depending on the implementation choosen the size of the matrix
      * could be equal to the total number of Dofs or to the number of
@@ -438,18 +356,138 @@ public:
      * @param rDx The Unknowns vector
      * @param rb The RHS vector
      */
-    void BuildAndSolve(typename TSchemeType::Pointer pScheme,
-                       ModelPart &rModelPart,
-                       TSystemMatrixType &rA,
-                       TSystemVectorType &rDx,
-                       TSystemVectorType &rb) override
+    void BuildAndSolve(
+        typename TSchemeType::Pointer pScheme,
+        ModelPart &rModelPart,
+        TSystemMatrixType &rA,
+        TSystemVectorType &rDx,
+        TSystemVectorType &rb)
     {
         KRATOS_TRY
 
-        BuildAndSolveWithConstraints(pScheme, rModelPart, rA, rDx, rb);
+        if (BaseType::GetEchoLevel() > 0)
+            START_TIMER("UpdateConstraints", 0)
+        this->UpdateConstraintsForBuilding(rModelPart);
+        if (BaseType::GetEchoLevel() > 0)
+            STOP_TIMER("UpdateConstraints", 0)
+
+        if (BaseType::GetEchoLevel() > 0)
+            START_TIMER("Build", 0)
+        Build(pScheme, rModelPart, rA, rb);
+        if (BaseType::GetEchoLevel() > 0)
+            STOP_TIMER("Build", 0)
+
+        this->ApplyDirichletConditions(pScheme, rModelPart, rA, rDx, rb);
+
+        KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
+            << "\nBefore the solution of the system"
+            << "\nSystem Matrix = " << rA << "\nunknowns vector = " << rDx
+            << "\nRHS vector = " << rb << std::endl;
+
+        if (BaseType::GetEchoLevel() > 0)
+            START_TIMER("System solve time ", 0);
+        this->SystemSolveWithPhysics(rA, rDx, rb, rModelPart);
+
+        KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
+            << "\nAfter the solution of the system"
+            << "\nSystem Matrix = " << rA << "\nUnknowns vector = " << rDx
+            << "\nRHS vector = " << rb << std::endl;
+
+        if (BaseType::GetEchoLevel() > 0)
+            START_TIMER("Reconstruct Slaves time ", 0);
+        ReconstructSlaveSolutionAfterSolve(rModelPart, rA, rDx, rb);
+        if (BaseType::GetEchoLevel() > 0)
+            STOP_TIMER("Reconstruct Slaves time ", 0);
+
+        if (BaseType::GetEchoLevel() > 0)
+            STOP_TIMER("System solve time ", 0);
 
         KRATOS_CATCH("")
     }
+
+    /*
+    * This function is exactly same as the Build() function in base class except that the function
+    * has the call to ApplyConstraints function call once the LHS or RHS are computed by elements and conditions
+    */
+    void Build(typename TSchemeType::Pointer pScheme,
+                              ModelPart &rModelPart,
+                              TSystemMatrixType &rA,
+                              TSystemVectorType &rb) override
+    {
+        // Resetting to zero the vector of reactions
+        TSparseSpace::SetToZero(*BaseType::mpReactionsVector);
+        ConstraintImposerType constraint_imposer(mGlobalMasterSlaveConstraints);
+
+        // Contributions to the system
+        LocalSystemMatrixType LHS_Contribution = LocalSystemMatrixType(0, 0);
+        LocalSystemVectorType RHS_Contribution = LocalSystemVectorType(0);
+
+        // vector containing the localization in the system of the different terms
+        Element::EquationIdVectorType equation_ids_vector;
+        ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
+        // assemble all elements
+        for (auto it = rModelPart.Elements().ptr_begin(); it < rModelPart.Elements().ptr_end(); it++)
+        {
+            // detect if the element is active or not. If the user did not make
+            // any choice the element is active by default
+            const bool element_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
+
+            if (element_is_active)
+            {
+                // calculate elemental contribution
+                pScheme->CalculateSystemContributions(
+                    *(it), LHS_Contribution, RHS_Contribution,
+                    equation_ids_vector, r_current_process_info);
+
+                constraint_imposer.template ApplyConstraints<Element>(*(*it), LHS_Contribution,
+                                                                      RHS_Contribution,
+                                                                      equation_ids_vector,
+                                                                      r_current_process_info);
+
+                // assemble the elemental contribution
+                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
+                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
+
+                // clean local elemental memory
+                pScheme->CleanMemory(*(it));
+            }
+        }
+
+        LHS_Contribution.resize(0, 0, false);
+        RHS_Contribution.resize(0, false);
+
+        // assemble all conditions
+        for (auto it = rModelPart.Conditions().ptr_begin(); it < rModelPart.Conditions().ptr_end(); it++)
+        {
+            // detect if the element is active or not. If the user did not make
+            // any choice the element is active by default
+            const bool condition_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
+            if (condition_is_active)
+            {
+                // calculate elemental contribution
+                pScheme->Condition_CalculateSystemContributions(
+                    *(it), LHS_Contribution, RHS_Contribution,
+                    equation_ids_vector, r_current_process_info);
+
+                constraint_imposer.template ApplyConstraints<Condition>(*(*it), LHS_Contribution,
+                                                                        RHS_Contribution,
+                                                                        equation_ids_vector,
+                                                                        r_current_process_info);
+
+                // assemble the condition contribution
+                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
+                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
+
+                // clean local elemental memory
+                pScheme->CleanMemory(*(it));
+            }
+        }
+
+        // finalizing the assembly
+        rA.GlobalAssemble();
+        rb.GlobalAssemble();
+    }
+
 
     /**
      * @brief Corresponds to the previous, but the System's matrix is considered
@@ -678,154 +716,151 @@ public:
      * @param rModelPart The model part of the problem to solve
      */
     void ResizeAndInitializeVectors(typename TSchemeType::Pointer pScheme,
-                                    TSystemMatrixPointerType &rpA,
-                                    TSystemVectorPointerType &rpDx,
-                                    TSystemVectorPointerType &rpb,
-                                    ModelPart &rModelPart) override
+                                                   TSystemMatrixPointerType &rpA,
+                                                   TSystemVectorPointerType &rpDx,
+                                                   TSystemVectorPointerType &rpb,
+                                                   ModelPart &rModelPart)
     {
-        KRATOS_TRY
-
-        // For Constraints
-        if (rModelPart.NumberOfMasterSlaveConstraints() > 0)
+        // resizing the system vectors and matrix
+        if (rpA == nullptr || TSparseSpace::Size1(*rpA) == 0 ||
+            BaseType::GetReshapeMatrixFlag() == true) // if the matrix is not initialized
         {
-            ResizeAndInitializeVectorsWithConstraints(pScheme, rpA, rpDx, rpb, rModelPart);
+            ConstraintImposerType constraint_imposer(mGlobalMasterSlaveConstraints);
+            IndexType number_of_local_dofs = mLastMyId - mFirstMyId;
+            int temp_size = number_of_local_dofs;
+            if (temp_size < 1000)
+                temp_size = 1000;
+            std::vector<int> temp(temp_size, 0);
+            // TODO: Check if these should be local elements and conditions
+            auto &r_elements_array = rModelPart.Elements();
+            auto &r_conditions_array = rModelPart.Conditions();
+            // generate map - use the "temp" array here
+            for (IndexType i = 0; i != number_of_local_dofs; i++)
+                temp[i] = mFirstMyId + i;
+            Epetra_Map my_map(-1, number_of_local_dofs, temp.data(), 0, mrComm);
+            // create and fill the graph of the matrix --> the temp array is
+            // reused here with a different meaning
+            Epetra_FECrsGraph Agraph(Copy, my_map, mGuessRowSize);
+            Element::EquationIdVectorType equation_ids_vector;
+            ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
+
+            // assemble all elements
+            for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
+            {
+
+                const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
+
+                if (!element_is_active)
+                {
+                    continue;
+                }
+                pScheme->EquationId(*(it_elem), equation_ids_vector,
+                                    r_current_process_info);
+
+                constraint_imposer.template ApplyConstraints<Element>(*(*(it_elem)), equation_ids_vector,
+                                                                      r_current_process_info);
+                // filling the list of active global indices (non fixed)
+                IndexType num_active_indices = 0;
+                for (IndexType i = 0; i < equation_ids_vector.size(); i++)
+                {
+                    temp[num_active_indices] = equation_ids_vector[i];
+                    num_active_indices += 1;
+                }
+
+                if (num_active_indices != 0)
+                {
+                    int ierr = Agraph.InsertGlobalIndices(
+                        num_active_indices, temp.data(), num_active_indices, temp.data());
+                    KRATOS_ERROR_IF(ierr < 0)
+                        << ": Epetra failure in Graph.InsertGlobalIndices. "
+                           "Error code: "
+                        << ierr << std::endl;
+                }
+                std::fill(temp.begin(), temp.end(), 0);
+            }
+
+            // assemble all conditions
+            for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
+            {
+                const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
+
+                if (!cond_is_active)
+                {
+                    continue;
+                }
+                pScheme->Condition_EquationId(
+                    *(it_cond), equation_ids_vector, r_current_process_info);
+
+                constraint_imposer.template ApplyConstraints<Condition>(*(*(it_cond)), equation_ids_vector, r_current_process_info);
+
+                // filling the list of active global indices (non fixed)
+                IndexType num_active_indices = 0;
+                for (IndexType i = 0; i < equation_ids_vector.size(); i++)
+                {
+                    temp[num_active_indices] = equation_ids_vector[i];
+                    num_active_indices += 1;
+                }
+
+                if (num_active_indices != 0)
+                {
+                    int ierr = Agraph.InsertGlobalIndices(
+                        num_active_indices, temp.data(), num_active_indices, temp.data());
+                    KRATOS_ERROR_IF(ierr < 0)
+                        << ": Epetra failure in Graph.InsertGlobalIndices. "
+                           "Error code: "
+                        << ierr << std::endl;
+                }
+                std::fill(temp.begin(), temp.end(), 0);
+            }
+
+
+            // finalizing graph construction
+            int ierr = Agraph.GlobalAssemble();
+            KRATOS_ERROR_IF(ierr < 0)
+                << ": Epetra failure in Graph.InsertGlobalIndices. Error code: " << ierr
+                << std::endl;
+            // generate a new matrix pointer according to this graph
+            TSystemMatrixPointerType p_new_A =
+                TSystemMatrixPointerType(new TSystemMatrixType(Copy, Agraph));
+            rpA.swap(p_new_A);
+            // generate new vector pointers according to the given map
+            if (rpb == nullptr || TSparseSpace::Size(*rpb) != BaseType::mEquationSystemSize)
+            {
+                TSystemVectorPointerType p_new_b =
+                    TSystemVectorPointerType(new TSystemVectorType(my_map));
+                rpb.swap(p_new_b);
+            }
+            if (rpDx == nullptr || TSparseSpace::Size(*rpDx) != BaseType::mEquationSystemSize)
+            {
+                TSystemVectorPointerType p_new_Dx =
+                    TSystemVectorPointerType(new TSystemVectorType(my_map));
+                rpDx.swap(p_new_Dx);
+            }
+            if (BaseType::mpReactionsVector == nullptr) // if the pointer is not initialized initialize it to an
+                                                        // empty matrix
+            {
+                TSystemVectorPointerType pNewReactionsVector =
+                    TSystemVectorPointerType(new TSystemVectorType(my_map));
+                BaseType::mpReactionsVector.swap(pNewReactionsVector);
+            }
+        }
+        else if (BaseType::mpReactionsVector == nullptr && this->mCalculateReactionsFlag)
+        {
+            TSystemVectorPointerType pNewReactionsVector =
+                TSystemVectorPointerType(new TSystemVectorType(rpDx->Map()));
+            BaseType::mpReactionsVector.swap(pNewReactionsVector);
         }
         else
         {
-            // resizing the system vectors and matrix
-            if (rpA == nullptr || TSparseSpace::Size1(*rpA) == 0 ||
-                BaseType::GetReshapeMatrixFlag() == true) // if the matrix is not initialized
+            if (TSparseSpace::Size1(*rpA) == 0 ||
+                TSparseSpace::Size1(*rpA) != BaseType::mEquationSystemSize ||
+                TSparseSpace::Size2(*rpA) != BaseType::mEquationSystemSize)
             {
-                IndexType number_of_local_dofs = mLastMyId - mFirstMyId;
-                int temp_size = number_of_local_dofs;
-                if (temp_size < 1000)
-                    temp_size = 1000;
-                std::vector<int> temp(temp_size, 0);
-                // TODO: Check if these should be local elements and conditions
-                auto &r_elements_array = rModelPart.Elements();
-                auto &r_conditions_array = rModelPart.Conditions();
-                // generate map - use the "temp" array here
-                for (IndexType i = 0; i != number_of_local_dofs; i++)
-                    temp[i] = mFirstMyId + i;
-                Epetra_Map my_map(-1, number_of_local_dofs, temp.data(), 0, mrComm);
-                // create and fill the graph of the matrix --> the temp array is
-                // reused here with a different meaning
-                Epetra_FECrsGraph Agraph(Copy, my_map, mGuessRowSize);
-                Element::EquationIdVectorType equation_ids_vector;
-                ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
-                // assemble all elements
-                for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
-                {
-                    const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
-
-                    if (!element_is_active)
-                    {
-                        continue;
-                    }
-                    pScheme->EquationId(*(it_elem), equation_ids_vector,
-                                        r_current_process_info);
-
-                    // filling the list of active global indices (non fixed)
-                    IndexType num_active_indices = 0;
-                    for (IndexType i = 0; i < equation_ids_vector.size(); i++)
-                    {
-                        temp[num_active_indices] = equation_ids_vector[i];
-                        num_active_indices += 1;
-                    }
-
-                    if (num_active_indices != 0)
-                    {
-                        int ierr = Agraph.InsertGlobalIndices(
-                            num_active_indices, temp.data(), num_active_indices, temp.data());
-                        KRATOS_ERROR_IF(ierr < 0)
-                            << ": Epetra failure in Graph.InsertGlobalIndices. "
-                               "Error code: "
-                            << ierr << std::endl;
-                    }
-                    std::fill(temp.begin(), temp.end(), 0);
-                }
-
-                // assemble all conditions
-                for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
-                {
-                    const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
-
-                    if (!cond_is_active)
-                    {
-                        continue;
-                    }
-                    pScheme->Condition_EquationId(
-                        *(it_cond), equation_ids_vector, r_current_process_info);
-
-                    // filling the list of active global indices (non fixed)
-                    IndexType num_active_indices = 0;
-                    for (IndexType i = 0; i < equation_ids_vector.size(); i++)
-                    {
-                        temp[num_active_indices] = equation_ids_vector[i];
-                        num_active_indices += 1;
-                    }
-
-                    if (num_active_indices != 0)
-                    {
-                        int ierr = Agraph.InsertGlobalIndices(
-                            num_active_indices, temp.data(), num_active_indices, temp.data());
-                        KRATOS_ERROR_IF(ierr < 0)
-                            << ": Epetra failure in Graph.InsertGlobalIndices. "
-                               "Error code: "
-                            << ierr << std::endl;
-                    }
-                    std::fill(temp.begin(), temp.end(), 0);
-                }
-
-                // finalizing graph construction
-                int ierr = Agraph.GlobalAssemble();
-                KRATOS_ERROR_IF(ierr < 0)
-                    << ": Epetra failure in Graph.InsertGlobalIndices. Error code: " << ierr
-                    << std::endl;
-                // generate a new matrix pointer according to this graph
-                TSystemMatrixPointerType p_new_A =
-                    TSystemMatrixPointerType(new TSystemMatrixType(Copy, Agraph));
-                rpA.swap(p_new_A);
-                // generate new vector pointers according to the given map
-                if (rpb == nullptr || TSparseSpace::Size(*rpb) != BaseType::mEquationSystemSize)
-                {
-                    TSystemVectorPointerType p_new_b =
-                        TSystemVectorPointerType(new TSystemVectorType(my_map));
-                    rpb.swap(p_new_b);
-                }
-                if (rpDx == nullptr || TSparseSpace::Size(*rpDx) != BaseType::mEquationSystemSize)
-                {
-                    TSystemVectorPointerType p_new_Dx =
-                        TSystemVectorPointerType(new TSystemVectorType(my_map));
-                    rpDx.swap(p_new_Dx);
-                }
-                if (BaseType::mpReactionsVector == nullptr) // if the pointer is not initialized initialize it to an
-                                                            // empty matrix
-                {
-                    TSystemVectorPointerType pNewReactionsVector =
-                        TSystemVectorPointerType(new TSystemVectorType(my_map));
-                    BaseType::mpReactionsVector.swap(pNewReactionsVector);
-                }
-            }
-            else if (BaseType::mpReactionsVector == nullptr && this->mCalculateReactionsFlag)
-            {
-                TSystemVectorPointerType pNewReactionsVector =
-                    TSystemVectorPointerType(new TSystemVectorType(rpDx->Map()));
-                BaseType::mpReactionsVector.swap(pNewReactionsVector);
-            }
-            else
-            {
-                if (TSparseSpace::Size1(*rpA) == 0 ||
-                    TSparseSpace::Size1(*rpA) != BaseType::mEquationSystemSize ||
-                    TSparseSpace::Size2(*rpA) != BaseType::mEquationSystemSize)
-                {
-                    KRATOS_ERROR
-                        << "It should not come here resizing is not allowed this "
-                           "way!!!!!!!! ... ";
-                }
+                KRATOS_ERROR
+                    << "It should not come here resizing is not allowed this "
+                       "way!!!!!!!! ... ";
             }
         }
-        KRATOS_CATCH("")
     }
 
     //**************************************************************************
@@ -1029,285 +1064,6 @@ protected:
     ///@name Protected Operations
     ///@{
 
-    void BuildAndSolveWithConstraints(
-        typename TSchemeType::Pointer pScheme,
-        ModelPart &rModelPart,
-        TSystemMatrixType &rA,
-        TSystemVectorType &rDx,
-        TSystemVectorType &rb)
-    {
-        KRATOS_TRY
-
-        if (BaseType::GetEchoLevel() > 0)
-            START_TIMER("UpdateConstraints", 0)
-        this->UpdateConstraintsForBuilding(rModelPart);
-        if (BaseType::GetEchoLevel() > 0)
-            STOP_TIMER("UpdateConstraints", 0)
-
-        if (BaseType::GetEchoLevel() > 0)
-            START_TIMER("Build", 0)
-        BuildWithConstraints(pScheme, rModelPart, rA, rb);
-        if (BaseType::GetEchoLevel() > 0)
-            STOP_TIMER("Build", 0)
-
-        this->ApplyDirichletConditions(pScheme, rModelPart, rA, rDx, rb);
-
-        KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
-            << "\nBefore the solution of the system"
-            << "\nSystem Matrix = " << rA << "\nunknowns vector = " << rDx
-            << "\nRHS vector = " << rb << std::endl;
-
-        if (BaseType::GetEchoLevel() > 0)
-            START_TIMER("System solve time ", 0);
-        this->SystemSolveWithPhysics(rA, rDx, rb, rModelPart);
-
-        KRATOS_INFO_IF("TrilinosResidualBasedBlockBuilderAndSolver", BaseType::GetEchoLevel() == 3)
-            << "\nAfter the solution of the system"
-            << "\nSystem Matrix = " << rA << "\nUnknowns vector = " << rDx
-            << "\nRHS vector = " << rb << std::endl;
-
-        if (BaseType::GetEchoLevel() > 0)
-            START_TIMER("Reconstruct Slaves time ", 0);
-        ReconstructSlaveSolutionAfterSolve(rModelPart, rA, rDx, rb);
-        if (BaseType::GetEchoLevel() > 0)
-            STOP_TIMER("Reconstruct Slaves time ", 0);
-
-        if (BaseType::GetEchoLevel() > 0)
-            STOP_TIMER("System solve time ", 0);
-
-        KRATOS_CATCH("")
-    }
-
-    void ResizeAndInitializeVectorsWithConstraints(typename TSchemeType::Pointer pScheme,
-                                                   TSystemMatrixPointerType &rpA,
-                                                   TSystemVectorPointerType &rpDx,
-                                                   TSystemVectorPointerType &rpb,
-                                                   ModelPart &rModelPart)
-    {
-        // resizing the system vectors and matrix
-        if (rpA == nullptr || TSparseSpace::Size1(*rpA) == 0 ||
-            BaseType::GetReshapeMatrixFlag() == true) // if the matrix is not initialized
-        {
-            ConstraintImposerType constraint_imposer(mGlobalMasterSlaveConstraints);
-            IndexType number_of_local_dofs = mLastMyId - mFirstMyId;
-            int temp_size = number_of_local_dofs;
-            if (temp_size < 1000)
-                temp_size = 1000;
-            std::vector<int> temp(temp_size, 0);
-            // TODO: Check if these should be local elements and conditions
-            auto &r_elements_array = rModelPart.Elements();
-            auto &r_conditions_array = rModelPart.Conditions();
-            // generate map - use the "temp" array here
-            for (IndexType i = 0; i != number_of_local_dofs; i++)
-                temp[i] = mFirstMyId + i;
-            Epetra_Map my_map(-1, number_of_local_dofs, temp.data(), 0, mrComm);
-            // create and fill the graph of the matrix --> the temp array is
-            // reused here with a different meaning
-            Epetra_FECrsGraph Agraph(Copy, my_map, mGuessRowSize);
-            Element::EquationIdVectorType equation_ids_vector;
-            ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
-
-            // assemble all elements
-            for (auto it_elem = r_elements_array.ptr_begin(); it_elem != r_elements_array.ptr_end(); ++it_elem)
-            {
-
-                const bool element_is_active = !((*it_elem)->IsDefined(ACTIVE)) || (*it_elem)->Is(ACTIVE);
-
-                if (!element_is_active)
-                {
-                    continue;
-                }
-                pScheme->EquationId(*(it_elem), equation_ids_vector,
-                                    r_current_process_info);
-
-                constraint_imposer.template ApplyConstraints<Element>(*(*(it_elem)), equation_ids_vector,
-                                                                      r_current_process_info);
-                // filling the list of active global indices (non fixed)
-                IndexType num_active_indices = 0;
-                for (IndexType i = 0; i < equation_ids_vector.size(); i++)
-                {
-                    temp[num_active_indices] = equation_ids_vector[i];
-                    num_active_indices += 1;
-                }
-
-                if (num_active_indices != 0)
-                {
-                    int ierr = Agraph.InsertGlobalIndices(
-                        num_active_indices, temp.data(), num_active_indices, temp.data());
-                    KRATOS_ERROR_IF(ierr < 0)
-                        << ": Epetra failure in Graph.InsertGlobalIndices. "
-                           "Error code: "
-                        << ierr << std::endl;
-                }
-                std::fill(temp.begin(), temp.end(), 0);
-            }
-
-            // assemble all conditions
-            for (auto it_cond = r_conditions_array.ptr_begin(); it_cond != r_conditions_array.ptr_end(); ++it_cond)
-            {
-                const bool cond_is_active = !((*it_cond)->IsDefined(ACTIVE)) || (*it_cond)->Is(ACTIVE);
-
-                if (!cond_is_active)
-                {
-                    continue;
-                }
-                pScheme->Condition_EquationId(
-                    *(it_cond), equation_ids_vector, r_current_process_info);
-
-                constraint_imposer.template ApplyConstraints<Condition>(*(*(it_cond)), equation_ids_vector, r_current_process_info);
-
-                // filling the list of active global indices (non fixed)
-                IndexType num_active_indices = 0;
-                for (IndexType i = 0; i < equation_ids_vector.size(); i++)
-                {
-                    temp[num_active_indices] = equation_ids_vector[i];
-                    num_active_indices += 1;
-                }
-
-                if (num_active_indices != 0)
-                {
-                    int ierr = Agraph.InsertGlobalIndices(
-                        num_active_indices, temp.data(), num_active_indices, temp.data());
-                    KRATOS_ERROR_IF(ierr < 0)
-                        << ": Epetra failure in Graph.InsertGlobalIndices. "
-                           "Error code: "
-                        << ierr << std::endl;
-                }
-                std::fill(temp.begin(), temp.end(), 0);
-            }
-
-
-            // finalizing graph construction
-            int ierr = Agraph.GlobalAssemble();
-            KRATOS_ERROR_IF(ierr < 0)
-                << ": Epetra failure in Graph.InsertGlobalIndices. Error code: " << ierr
-                << std::endl;
-            // generate a new matrix pointer according to this graph
-            TSystemMatrixPointerType p_new_A =
-                TSystemMatrixPointerType(new TSystemMatrixType(Copy, Agraph));
-            rpA.swap(p_new_A);
-            // generate new vector pointers according to the given map
-            if (rpb == nullptr || TSparseSpace::Size(*rpb) != BaseType::mEquationSystemSize)
-            {
-                TSystemVectorPointerType p_new_b =
-                    TSystemVectorPointerType(new TSystemVectorType(my_map));
-                rpb.swap(p_new_b);
-            }
-            if (rpDx == nullptr || TSparseSpace::Size(*rpDx) != BaseType::mEquationSystemSize)
-            {
-                TSystemVectorPointerType p_new_Dx =
-                    TSystemVectorPointerType(new TSystemVectorType(my_map));
-                rpDx.swap(p_new_Dx);
-            }
-            if (BaseType::mpReactionsVector == nullptr) // if the pointer is not initialized initialize it to an
-                                                        // empty matrix
-            {
-                TSystemVectorPointerType pNewReactionsVector =
-                    TSystemVectorPointerType(new TSystemVectorType(my_map));
-                BaseType::mpReactionsVector.swap(pNewReactionsVector);
-            }
-        }
-        else if (BaseType::mpReactionsVector == nullptr && this->mCalculateReactionsFlag)
-        {
-            TSystemVectorPointerType pNewReactionsVector =
-                TSystemVectorPointerType(new TSystemVectorType(rpDx->Map()));
-            BaseType::mpReactionsVector.swap(pNewReactionsVector);
-        }
-        else
-        {
-            if (TSparseSpace::Size1(*rpA) == 0 ||
-                TSparseSpace::Size1(*rpA) != BaseType::mEquationSystemSize ||
-                TSparseSpace::Size2(*rpA) != BaseType::mEquationSystemSize)
-            {
-                KRATOS_ERROR
-                    << "It should not come here resizing is not allowed this "
-                       "way!!!!!!!! ... ";
-            }
-        }
-    }
-
-    /*
-    * This function is exactly same as the Build() function in base class except that the function
-    * has the call to ApplyConstraints function call once the LHS or RHS are computed by elements and conditions
-    */
-    void BuildWithConstraints(typename TSchemeType::Pointer pScheme,
-                              ModelPart &rModelPart,
-                              TSystemMatrixType &rA,
-                              TSystemVectorType &rb)
-    {
-        // Resetting to zero the vector of reactions
-        TSparseSpace::SetToZero(*BaseType::mpReactionsVector);
-        ConstraintImposerType constraint_imposer(mGlobalMasterSlaveConstraints);
-
-        // Contributions to the system
-        LocalSystemMatrixType LHS_Contribution = LocalSystemMatrixType(0, 0);
-        LocalSystemVectorType RHS_Contribution = LocalSystemVectorType(0);
-
-        // vector containing the localization in the system of the different terms
-        Element::EquationIdVectorType equation_ids_vector;
-        ProcessInfo &r_current_process_info = rModelPart.GetProcessInfo();
-        // assemble all elements
-        for (auto it = rModelPart.Elements().ptr_begin(); it < rModelPart.Elements().ptr_end(); it++)
-        {
-            // detect if the element is active or not. If the user did not make
-            // any choice the element is active by default
-            const bool element_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
-
-            if (element_is_active)
-            {
-                // calculate elemental contribution
-                pScheme->CalculateSystemContributions(
-                    *(it), LHS_Contribution, RHS_Contribution,
-                    equation_ids_vector, r_current_process_info);
-
-                constraint_imposer.template ApplyConstraints<Element>(*(*it), LHS_Contribution,
-                                                                      RHS_Contribution,
-                                                                      equation_ids_vector,
-                                                                      r_current_process_info);
-
-                // assemble the elemental contribution
-                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
-                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
-
-                // clean local elemental memory
-                pScheme->CleanMemory(*(it));
-            }
-        }
-
-        LHS_Contribution.resize(0, 0, false);
-        RHS_Contribution.resize(0, false);
-
-        // assemble all conditions
-        for (auto it = rModelPart.Conditions().ptr_begin(); it < rModelPart.Conditions().ptr_end(); it++)
-        {
-            // detect if the element is active or not. If the user did not make
-            // any choice the element is active by default
-            const bool condition_is_active = !((*it)->IsDefined(ACTIVE)) || (*it)->Is(ACTIVE);
-            if (condition_is_active)
-            {
-                // calculate elemental contribution
-                pScheme->Condition_CalculateSystemContributions(
-                    *(it), LHS_Contribution, RHS_Contribution,
-                    equation_ids_vector, r_current_process_info);
-
-                constraint_imposer.template ApplyConstraints<Condition>(*(*it), LHS_Contribution,
-                                                                        RHS_Contribution,
-                                                                        equation_ids_vector,
-                                                                        r_current_process_info);
-
-                // assemble the condition contribution
-                TSparseSpace::AssembleLHS(rA, LHS_Contribution, equation_ids_vector);
-                TSparseSpace::AssembleRHS(rb, RHS_Contribution, equation_ids_vector);
-
-                // clean local elemental memory
-                pScheme->CleanMemory(*(it));
-            }
-        }
-
-        // finalizing the assembly
-        rA.GlobalAssemble();
-        rb.GlobalAssemble();
-    }
 
     /**
      * @brief   this method condenses the MasterSlaveConstraints which are added on the rModelPart
