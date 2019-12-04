@@ -127,7 +127,6 @@ void UpdatedLagrangianElement::InitializeSolutionStep(ProcessInfo& rCurrentProce
         r_geometry[i].SetLock();
         r_geometry[i].FastGetSolutionStepValue(NODAL_MOMENTUM, 0) += nodal_momentum;
         r_geometry[i].FastGetSolutionStepValue(NODAL_INERTIA, 0) += nodal_inertia;
-
         r_geometry[i].FastGetSolutionStepValue(NODAL_MASS, 0) += r_N(0, i) * MP_mass;
         r_geometry[i].UnSetLock();
 
@@ -167,8 +166,11 @@ void UpdatedLagrangianElement::CalculateAll(
         // Operation performed: add K_material to the rLefsHandSideMatrix
         this->CalculateAndAddKuum(rLeftHandSideMatrix, B, constitutive_variables.ConstitutiveMatrix, integration_weight);
 
-        // Operation performed: add K_geometry to the rLefsHandSideMatrix
-        this->CalculateAndAddKuug(rLeftHandSideMatrix, kinematic_variables.DN_DX, constitutive_variables.StressVector, integration_weight);
+        if (!rCurrentProcessInfo.GetValue(ANALYSIS_IS_LINEAR))
+        {
+            // Operation performed: add K_geometry to the rLefsHandSideMatrix
+            this->CalculateAndAddKuug(rLeftHandSideMatrix, kinematic_variables.DN_DX, constitutive_variables.StressVector, integration_weight);
+        }
     }
     if (CalculateResidualVectorFlag)
     {
@@ -743,15 +745,35 @@ void UpdatedLagrangianElement::CalculateMassMatrix(
     // TOTAL MASS OF ONE MP ELEMENT
     const double & r_total_mass = this->GetValue(MP_MASS);
 
-    // LUMPED MATRIX
-    for ( unsigned int i = 0; i < number_of_nodes; i++ )
+    double massEntry;
+    if (rCurrentProcessInfo.GetValue(MASS_IS_LUMPED))
     {
-        double temp = N(0, i) * r_total_mass;
-
-        for ( unsigned int j = 0; j < dimension; j++ )
+        // LUMPED MATRIX
+        for (unsigned int i = 0; i < number_of_nodes; i++)
         {
-            unsigned int index = i * dimension + j;
-            rMassMatrix( index, index ) = temp;
+            massEntry = N(0, i) * r_total_mass;
+            for (unsigned int j = 0; j < dimension; j++)
+            {
+                unsigned int index = i * dimension + j;
+                rMassMatrix(index, index) = massEntry;
+            }
+        }
+    }
+    else
+    {
+        // Consistent matrix
+        for (unsigned int i = 0; i < number_of_nodes; i++)
+        {
+            for (unsigned int j = 0; j < number_of_nodes; j++)
+            {
+                massEntry = N(0, i) * N(0, j) * r_total_mass;
+                for (unsigned int n = 0; n < dimension; n++)
+                {
+                    unsigned int indexI = i * dimension + n;
+                    unsigned int indexJ = j * dimension + n;
+                    rMassMatrix(indexI, indexJ) = massEntry;
+                }
+            }
         }
     }
 

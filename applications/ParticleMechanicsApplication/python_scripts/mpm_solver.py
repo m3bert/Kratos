@@ -61,6 +61,7 @@ class MPMSolver(PythonSolver):
             "axis_symmetric_flag"                : false,
             "block_builder"                      : true,
             "move_mesh_flag"                     : false,
+            "mass_matrix"                        : "lumped",
             "problem_domain_sub_model_part_list" : [],
             "processes_sub_model_part_list"      : [],
             "auxiliary_variables_list"           : [],
@@ -272,6 +273,11 @@ class MPMSolver(PythonSolver):
             # add specific variables for the problem (pressure dofs)
             model_part.AddNodalSolutionStepVariable(KratosParticle.PRESSURE_REACTION)
             model_part.AddNodalSolutionStepVariable(KratosParticle.NODAL_MPRESSURE)
+        if (self.settings["mass_matrix"].GetString() == "consistent"):
+            self.material_point_model_part.ProcessInfo.SetValue(KratosMultiphysics.MASS_IS_LUMPED, False)
+        else:
+            self.material_point_model_part.ProcessInfo.SetValue(KratosMultiphysics.MASS_IS_LUMPED, True)
+        
 
     def _AddDynamicVariables(self, model_part):
         model_part.AddNodalSolutionStepVariable(KratosMultiphysics.VELOCITY)

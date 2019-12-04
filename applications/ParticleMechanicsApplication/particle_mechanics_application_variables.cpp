@@ -92,4 +92,5 @@ namespace Kratos
 
     // Solver related variables
     KRATOS_CREATE_VARIABLE(bool, ANALYSIS_IS_LINEAR)
+    KRATOS_CREATE_VARIABLE(bool, MASS_IS_LUMPED)
 }

@@ -255,6 +255,7 @@ namespace Kratos
 
         // Solver related variables
         KRATOS_REGISTER_VARIABLE(ANALYSIS_IS_LINEAR);
+        KRATOS_REGISTER_VARIABLE(MASS_IS_LUMPED);
     }
 
 }  // namespace Kratos.
