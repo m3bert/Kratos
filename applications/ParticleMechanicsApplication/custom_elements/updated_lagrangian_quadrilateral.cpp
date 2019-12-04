@@ -142,7 +142,9 @@ void UpdatedLagrangianQuadrilateral::Initialize()
 //************************************************************************************
 //************************************************************************************
 
-void UpdatedLagrangianQuadrilateral::InitializeGeneralVariables (GeneralVariables& rVariables, const ProcessInfo& rCurrentProcessInfo)
+void UpdatedLagrangianQuadrilateral::InitializeGeneralVariables (
+    GeneralVariables& rVariables, 
+    const ProcessInfo& rCurrentProcessInfo)
 {
     const unsigned int number_of_nodes = GetGeometry().size();
     const unsigned int dimension = GetGeometry().WorkingSpaceDimension();

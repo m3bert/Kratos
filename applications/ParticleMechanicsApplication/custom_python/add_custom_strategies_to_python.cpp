@@ -26,6 +26,7 @@
 //---strategies
 #include "solving_strategies/strategies/solving_strategy.h"
 #include "custom_strategies/strategies/mpm_residual_based_newton_raphson_strategy.hpp"
+#include "custom_strategies/strategies/mpm_residual_based_linear_strategy.hpp"
 
 //---convergence criterias
 #include "solving_strategies/convergencecriterias/convergence_criteria.h"
@@ -58,9 +59,11 @@ namespace Python{
         typedef ConvergenceCriteria< SparseSpaceType, LocalSpaceType > ConvergenceCriteriaType;
 
         typedef MPMResidualBasedNewtonRaphsonStrategy< SparseSpaceType, LocalSpaceType, LinearSolverType> MPMResidualBasedNewtonRaphsonStrategyType;
+        typedef MPMResidualBasedLinearStrategy< SparseSpaceType, LocalSpaceType, LinearSolverType > MPMResidualBasedLinearStrategyType;
 
         //custom scheme types
         typedef MPMResidualBasedBossakScheme< SparseSpaceType, LocalSpaceType >  MPMResidualBasedBossakSchemeType;
+
 
         // MPM Residual Based Bossak Scheme Type
         py::class_< MPMResidualBasedBossakSchemeType,typename MPMResidualBasedBossakSchemeType::Pointer, BaseSchemeType >(m,"MPMResidualBasedBossakScheme")
@@ -82,6 +85,16 @@ namespace Python{
             .def("GetFinalizeSolutionStepFlag", &MPMResidualBasedNewtonRaphsonStrategyType::GetFinalizeSolutionStepFlag)
             ;
 
+        // MPM Residual Based Linear Strategy Type
+        py::class_< MPMResidualBasedLinearStrategyType, typename MPMResidualBasedLinearStrategyType::Pointer, BaseSolvingStrategyType >
+            (m, "MPMResidualBasedLinearStrategy")
+            .def(py::init < ModelPart&, BaseSchemeType::Pointer, LinearSolverType::Pointer, bool, bool, bool, bool >())
+            .def(py::init < ModelPart&, BaseSchemeType::Pointer, LinearSolverType::Pointer, BuilderAndSolverType::Pointer, bool, bool, bool, bool  >())
+            .def("SetInitializePerformedFlag", &MPMResidualBasedLinearStrategyType::SetInitializePerformedFlag)
+            .def("GetInitializePerformedFlag", &MPMResidualBasedLinearStrategyType::GetInitializePerformedFlag)
+            .def("SetFinalizeSolutionStepFlag", &MPMResidualBasedLinearStrategyType::SetFinalizeSolutionStepFlag)
+            .def("GetFinalizeSolutionStepFlag", &MPMResidualBasedLinearStrategyType::GetFinalizeSolutionStepFlag)
+            ;
     }
 
 }  // namespace Python.

@@ -78,3 +78,34 @@ script.py
 
 # Auxiliar file (deprecated?)
 applications/python_scripts/beam_profiles\.csv
+.vs/ProjectSettings.json
+.vs/PythonSettings.json
+.vs/slnx.sqlite
+.vs/VSWorkspaceState.json
+out/build/x64-Debug/.cmake/api/v1/query/client-MicrosoftVS/query.json
+out/build/x64-Debug/CMakeCache.txt
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeCCompiler.cmake
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeCXXCompiler.cmake
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeDetermineCompilerABI_C.bin
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeDetermineCompilerABI_CXX.bin
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeRCCompiler.cmake
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CMakeSystem.cmake
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CompilerIdC/CMakeCCompilerId.c
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CompilerIdC/CMakeCCompilerId.exe
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CompilerIdCXX/CMakeCXXCompilerId.cpp
+out/build/x64-Debug/CMakeFiles/3.15.19080502-MSVC_2/CompilerIdCXX/CMakeCXXCompilerId.exe
+out/build/x64-Debug/CMakeFiles/CheckTypeSize/OFF64_T.c
+out/build/x64-Debug/CMakeFiles/cmake.check_cache
+out/build/x64-Debug/CMakeFiles/CMakeError.log
+out/build/x64-Debug/CMakeFiles/CMakeOutput.log
+out/build/x64-Debug/CMakeFiles/FindOpenMP/ompver_C.bin
+out/build/x64-Debug/CMakeFiles/FindOpenMP/ompver_CXX.bin
+out/build/x64-Debug/CMakeFiles/FindOpenMP/OpenMPCheckVersion.c
+out/build/x64-Debug/CMakeFiles/FindOpenMP/OpenMPCheckVersion.cpp
+out/build/x64-Debug/CMakeFiles/FindOpenMP/OpenMPTryFlag.c
+out/build/x64-Debug/CMakeFiles/FindOpenMP/OpenMPTryFlag.cpp
+out/build/x64-Debug/CMakeFiles/ShowIncludes/foo.h
+out/build/x64-Debug/CMakeFiles/ShowIncludes/main.c
+out/build/x64-Debug/external_libraries/zlib/zconf.h
+out/build/x64-Debug/external_libraries/zlib/zlib.pc
+out/build/x64-Debug/VSInheritEnvironments.txt
