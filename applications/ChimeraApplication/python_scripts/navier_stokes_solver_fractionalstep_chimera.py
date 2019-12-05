@@ -44,7 +44,7 @@ class NavierStokesSolverFractionalStepForChimera(NavierStokesSolverFractionalSte
             chim_mp_imp.ImportChimeraModelparts(self.main_model_part, chimera_mp_import_settings, material_file=material_file_name, parallel_type="OpenMP")
             KratosMultiphysics.Logger.PrintInfo("NavierStokesSolverMonolithicChimera", " Import of all chimera modelparts completed.")
         else:# we can use the default implementation in the base class
-            super(TrilinosChimeraNavierStokesSolverMonolithic,self).ImportModelPart()
+            super(NavierStokesSolverFractionalStepForChimera,self).ImportModelPart()
 
     def Initialize(self):
         #self.computing_model_part = self.GetComputingModelPart()
