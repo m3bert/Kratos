@@ -172,8 +172,8 @@ public:
         {
             for (NodesContainerType::iterator it = RecvNodes[i].begin();
                  it != RecvNodes[i].end(); ++it)
-                if (rGatheredModelPart.Nodes().find(it->Id()) ==
-                    rGatheredModelPart.Nodes().end())
+                // if (rGatheredModelPart.Nodes().find(it->Id()) ==
+                //     rGatheredModelPart.Nodes().end())
                     rGatheredModelPart.Nodes().push_back(*it.base());
         }
         int temp = rGatheredModelPart.Nodes().size();
@@ -273,13 +273,6 @@ public:
             rGatheredModelPart.Conditions().push_back(*it.base());
         }
         // rGatheredModelPart.Conditions().Unique();
-
-        if (r_comm.IsDistributed())
-        {
-#ifdef KRATOS_USING_MPI
-           // ParallelFillCommunicator(rGatheredModelPart).Execute();
-#endif
-        }
     }
 
     ///@}
