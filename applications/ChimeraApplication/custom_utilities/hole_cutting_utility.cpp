@@ -119,7 +119,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
     {
         rRemovedModelPart.SetCommunicator(rModelPart.pGetCommunicator());
 #ifdef KRATOS_USING_MPI
-        ParallelFillCommunicator(rRemovedModelPart).Execute();
+        // ParallelFillCommunicator(rRemovedModelPart).Execute();
 #endif
     }
     KRATOS_CATCH("");
@@ -159,14 +159,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
         }
     };
     // Taking care of the communicator stuff.
-    const auto &r_data_comm = rVolumeModelPart.GetCommunicator().GetDataCommunicator();
-    if (r_data_comm.IsDistributed())
-    {
-        rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
-#ifdef KRATOS_USING_MPI
-        // ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
-#endif
-    }
+    rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
 
     // IndexType n_nodes = rVolumeModelPart.ElementsBegin()->GetGeometry().size();
     // KRATOS_ERROR_IF(!(n_nodes != 3 || n_nodes != 4))
@@ -260,6 +253,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
     const bool &is_distributed = r_comm.IsDistributed();
     const auto &r_interface_mesh = r_comm.InterfaceMesh();
+    const auto &r_local_mesh = r_comm.LocalMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -279,11 +273,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 vector<IndexType> original_nodes_order =
                     ordered_skin_face_nodes_map[it->first];
 
-                Node<3>::Pointer pnode1 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
-                Node<3>::Pointer pnode2 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
-
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
@@ -293,6 +282,11 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     if (ghost_face)
                         continue;
                 }
+                Node<3>::Pointer pnode1 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
+                Node<3>::Pointer pnode2 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
+
 
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
@@ -318,13 +312,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 // including its normal orientation
                 vector<IndexType> original_nodes_order =
                     ordered_skin_face_nodes_map[it->first];
-                Node<3>::Pointer pnode1 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
-                Node<3>::Pointer pnode2 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
-                Node<3>::Pointer pnode3 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[2]);
-
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
@@ -335,7 +322,12 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     if (ghost_face)
                         continue;
                 }
-
+                Node<3>::Pointer pnode1 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
+                Node<3>::Pointer pnode2 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
+                Node<3>::Pointer pnode3 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[2]);
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
                 vector_of_node_ids.push_back(original_nodes_order[1]);
@@ -361,14 +353,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 vector<IndexType> original_nodes_order =
                     ordered_skin_face_nodes_map[it->first];
 
-                Node<3>::Pointer pnode1 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
-                Node<3>::Pointer pnode2 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
-                Node<3>::Pointer pnode3 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[2]);
-                Node<3>::Pointer pnode4 =
-                    rVolumeModelPart.Nodes()(original_nodes_order[3]);
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
@@ -380,6 +364,14 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     if (ghost_face)
                         continue;
                 }
+                Node<3>::Pointer pnode1 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[0]);
+                Node<3>::Pointer pnode2 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[1]);
+                Node<3>::Pointer pnode3 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[2]);
+                Node<3>::Pointer pnode4 =
+                    rVolumeModelPart.Nodes()(original_nodes_order[3]);
                 // Storing the node ids list
                 vector_of_node_ids.push_back(original_nodes_order[0]);
                 vector_of_node_ids.push_back(original_nodes_order[1]);
@@ -414,8 +406,10 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     for (const auto &i_node_id : vector_of_node_ids)
     {
         // Adding the nodes to the rExtractedBoundaryModelPart
-        Node<3>::Pointer pnode = rVolumeModelPart.Nodes()(i_node_id);
-        rExtractedBoundaryModelPart.AddNode(pnode);
+        if(r_local_mesh.HasNode(i_node_id)){
+            Node<3>::Pointer pnode = rVolumeModelPart.Nodes()(i_node_id);
+            rExtractedBoundaryModelPart.AddNode(pnode);
+        }
     }
 
     // for multipatch
@@ -469,6 +463,10 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 
     rExtractedBoundaryModelPart.RemoveConditions(TO_ERASE);
     rExtractedBoundaryModelPart.RemoveNodes(TO_ERASE);
+
+#ifdef KRATOS_USING_MPI
+        ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
+#endif
 
     KRATOS_CATCH("");
 }
