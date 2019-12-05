@@ -459,7 +459,8 @@ protected:
         rSlaveNode.Set(SLAVE);
         ModelPart::MasterSlaveConstraintType::Pointer p_new_constraint = rCloneConstraint.Create(ConstraintId, rMasterNode, rMasterVariable, rSlaveNode, rSlaveVariable, Weight, Constant);
         p_new_constraint->Set(TO_ERASE);
-        p_new_constraint->SetValue(PARTITION_INDEX, rSlaveNode.GetSolutionStepValue(PARTITION_INDEX) );
+        if(rSlaveNode.Has(PARTITION_INDEX))
+            p_new_constraint->SetValue(PARTITION_INDEX, rSlaveNode.GetSolutionStepValue(PARTITION_INDEX) );
         mNodeIdToConstraintIdsMap[rSlaveNode.Id()].push_back(ConstraintId);
         //TODO: Check if an insert(does a sort) is required here or just use a push_back and then
         //      sort once at the end.
