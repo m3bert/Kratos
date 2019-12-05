@@ -258,7 +258,7 @@ protected:
                                     "model_part_name":"PLEASE_SPECIFY",
                                     "search_model_part_name":"PLEASE_SPECIFY",
                                     "boundary_model_part_name":"PLEASE_SPECIFY",
-                                    "input_filename":"PLEASE_SPECIFY",
+                                    "model_import_settings":{},
                                     "overlap_distance":0.0
                                 }
         )");
@@ -571,22 +571,23 @@ protected:
     /**
      * @brief Loops over the nodes of the given modelpart and uses the binlocater to locate them on a
      *          element and formulates respecive constraints
-     * @param rModelPart The modelpart whos nodes are to be found.
+     * @param rBoundaryModelPart The modelpart whos nodes are to be found.
      * @param rBinLocator The bin based locator formulated on the background. This is used to locate nodes on rBoundaryModelPart.
      * @param rVelocityMasterSlaveContainerVector the vector of velocity constraints vectors (one for each thread)
      * @param rPressureMasterSlaveContainerVector the vector of pressure constraints vectors (one for each thread)
      */
-    void FormulateConstraints(ModelPart &rModelPart, PointLocatorType &rBinLocator, MasterSlaveContainerVectorType &rVelocityMasterSlaveContainerVector,
+    void FormulateConstraints(ModelPart &rBoundaryModelPart, PointLocatorType &rBinLocator, MasterSlaveContainerVectorType &rVelocityMasterSlaveContainerVector,
                               MasterSlaveContainerVectorType &rPressureMasterSlaveContainerVector)
     {
         const DataCommunicator &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         int mpi_rank = r_comm.Rank();
         int mpi_size = r_comm.Size();
+        const bool is_comm_distributed = r_comm.IsDistributed();
         std::vector<NodesContainerType> SendNodes(mpi_size);
         Model &current_model = mrMainModelPart.GetModel();
-        auto& gathered_modelpart = r_comm.IsDistributed() ? current_model.CreateModelPart("GatheredBoundary") : rModelPart;
-        if(r_comm.IsDistributed())
-            DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rModelPart, gathered_modelpart);
+        auto& gathered_modelpart = is_comm_distributed ? current_model.CreateModelPart("GatheredBoundary") : rBoundaryModelPart;
+        if(is_comm_distributed)
+            DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rBoundaryModelPart, gathered_modelpart);
 
         std::vector<int> vector_of_non_found_nodes;
         const int n_boundary_nodes = static_cast<int>(gathered_modelpart.Nodes().size());
@@ -606,7 +607,7 @@ protected:
 
             ModelPart::NodesContainerType::iterator i_boundary_node = gathered_modelpart.NodesBegin() + i_bn;
             NodeType& r_boundary_node = *( *(i_boundary_node.base()) );
-            const int node_p_index = r_boundary_node.GetSolutionStepValue(PARTITION_INDEX);
+            const int node_p_index = is_comm_distributed ? r_boundary_node.GetSolutionStepValue(PARTITION_INDEX) : 0;
             unsigned int start_constraint_id = i_bn * (TDim + 1) * (TDim + 1);
             Element::Pointer r_host_element;
             Vector weights;
@@ -623,7 +624,7 @@ protected:
             }
         }
 
-        if (r_comm.IsDistributed())
+        if (is_comm_distributed)
         {
             SynchronizeNodes(mrMainModelPart, SendNodes);
             SynchronizeConstraints(rVelocityMasterSlaveContainerVector);
@@ -715,34 +716,54 @@ protected:
     void SynchronizeNodes(ModelPart& rModelpart, std::vector<NodesContainerType>& rSendNodes)
     {
         const DataCommunicator &r_comm = rModelpart.GetCommunicator().GetDataCommunicator();
-        int mpi_size = r_comm.Size();
+        const int mpi_size = r_comm.Size();
+        const int mpi_rank = r_comm.Rank();
         std::vector<NodesContainerType> RecvNodes(mpi_size);
+        BuiltinTimer send_recv_nodes;
         rModelpart.GetCommunicator().TransferObjects(rSendNodes, RecvNodes);
+        double time_send_recv = send_recv_nodes.ElapsedSeconds();
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken to send recv nodes         : ", mEchoLevel > 1) << r_comm.Max(time_send_recv, 0) << std::endl;
+
+        BuiltinTimer add_nodes;
         for (unsigned int i = 0; i < RecvNodes.size(); i++)
         {
             for (NodesContainerType::iterator it = RecvNodes[i].begin();
-                 it != RecvNodes[i].end(); ++it)
-                if (rModelpart.Nodes().find(it->Id()) ==
-                    rModelpart.Nodes().end()){
+                 it != RecvNodes[i].end(); ++it){
+                // if (rModelpart.Nodes().find(it->Id()) ==
+                //     rModelpart.Nodes().end()){
                         auto p_node = *it.base();
                         const int p_node_p_index = p_node->GetSolutionStepValue(PARTITION_INDEX);
-                        auto p_new_node = mrMainModelPart.CreateNewNode(p_node->Id(), *p_node);
-                        p_new_node->AddDof(VELOCITY_X, REACTION_X);
-                        p_new_node->AddDof(VELOCITY_Y, REACTION_Y);
-                        p_new_node->AddDof(VELOCITY_Z, REACTION_Z);
-                        p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
-                        p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
-                    }
+                        // auto p_new_node = mrMainModelPart.CreateNewNode(p_node->Id(), *p_node);
+                        // p_new_node->AddDof(VELOCITY_X, REACTION_X);
+                        // p_new_node->AddDof(VELOCITY_Y, REACTION_Y);
+                        // p_new_node->AddDof(VELOCITY_Z, REACTION_Z);
+                        // p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
+                        // p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
+                        rModelpart.Nodes().push_back(p_node);
+                        if(p_node_p_index != mpi_rank)
+                            mRemoteNodes.push_back(p_node->Id());
+                    //}
+                 }
         }
+        double time_add_nodes = add_nodes.ElapsedSeconds();
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken to add nodes                  : ", mEchoLevel > 1) << r_comm.Max(time_add_nodes, 0)  << std::endl;
+
+        BuiltinTimer unique_nodes;
+        rModelpart.Nodes().Unique();
+        double time_unique_nodes = add_nodes.ElapsedSeconds();
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken to unique nodes               : ", mEchoLevel > 1) << r_comm.Max(time_unique_nodes, 0) << std::endl;
+
         int temp = rModelpart.Nodes().size();
         KRATOS_ERROR_IF(temp != int(rModelpart.Nodes().size()))
             << "the rModelpart has repeated nodes";
         rSendNodes.clear();
         RecvNodes.clear();
-        rModelpart.Nodes().Unique();
 
 #ifdef KRATOS_USING_MPI
+        BuiltinTimer par_fill_comm; 
         ParallelFillCommunicator(rModelpart).Execute();
+        double par_fill_time = par_fill_comm.ElapsedSeconds();
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken for parallel fill comm     : ", mEchoLevel > 1) << r_comm.Max(par_fill_time, 0) << std::endl;
 #endif
     }
     ///@}
@@ -922,18 +943,17 @@ private:
     {
         Parameters vtk_parameters(R"(
                 {
-                    "model_part_name"                    : "HoleModelpart",
                     "output_control_type"                : "step",
                     "output_frequency"                   : 1,
-                    "file_format"                        : "ascii",
+                    "file_format"                        : "binary",
                     "output_precision"                   : 3,
                     "output_sub_model_parts"             : false,
                     "folder_name"                        : "test_vtk_output",
                     "save_output_files_in_folder"        : false,
-                    "nodal_solution_step_data_variables" : ["VELOCITY","PRESSURE","DISTANCE"],
+                    "nodal_solution_step_data_variables" : [],
                     "nodal_data_value_variables"         : [],
-                    "element_flags"                      : ["ACTIVE"],
-                    "nodal_flags"                        : ["VISITED"],
+                    "element_flags"                      : [],
+                    "nodal_flags"                        : [],
                     "element_data_value_variables"       : [],
                     "condition_data_value_variables"     : []
                 }
