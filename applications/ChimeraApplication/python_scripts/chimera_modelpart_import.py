@@ -6,16 +6,26 @@ import time
 import json
 from copy import deepcopy
 
-def ImportChimeraModelparts(main_modelpart, new_mp_file_names, material_file="", parallel_type="OpenMP"):
+def ImportChimeraModelparts(main_modelpart, chimera_mp_import_settings_list, material_file="", parallel_type="OpenMP"):
     '''
         This function extends and specifies the functionalies of the
         mpda_manipulator from: https://github.com/philbucher/mdpa-manipulator
 
         main_modelpart      : The modelpart to which the new modelparts are appended to.
-        new_mp_file_names   : The names (as a list) of the modelpart (file name including path) which will be imported.
+        chimera_mp_import_settings_list   : The list of import setting for all chimera modelparts. each entry has the following format:
+        {
+            "model_import_settings":{
+                    "input_type": "mdpa",
+                    "input_filename": "SOME"
+            },
+            "echo_level":1
+        }
     '''
     if parallel_type == "OpenMP":
-        for mdpa_file_name in new_mp_file_names:
+        for mp_import_setting in chimera_mp_import_settings_list:
+            mdpa_file_name = mp_import_setting["input_filename"].GetString()
+            if mdpa_file_name.endswith('.mdpa'):
+                mdpa_file_name = mdpa_file_name[:-5]
             model_part = ReadModelPart(mdpa_file_name, "new_modelpart", material_file)
             AddModelPart(main_modelpart, model_part)
     elif(parallel_type == "MPI"):
@@ -28,13 +38,15 @@ def ImportChimeraModelparts(main_modelpart, new_mp_file_names, material_file="",
         "echo_level":1
         }""")
 
-        for mdpa_file_name in new_mp_file_names:
+        for mp_import_setting in chimera_mp_import_settings_list:
             model = KratosMultiphysics.Model()
             model_part = model.CreateModelPart("new_modelpart")
             model_part.AddNodalSolutionStepVariable(KratosMultiphysics.PARTITION_INDEX)
+            mdpa_file_name = mp_import_setting["input_filename"].GetString()
             if mdpa_file_name.endswith('.mdpa'):
                 mdpa_file_name = mdpa_file_name[:-5]
-            input_settings["model_import_settings"]["input_filename"].SetString(mdpa_file_name)
+            mp_import_setting["input_filename"].SetString(mdpa_file_name)
+            input_settings["model_import_settings"] = mp_import_setting
 
             from KratosMultiphysics.mpi import distributed_import_model_part_utility
 
