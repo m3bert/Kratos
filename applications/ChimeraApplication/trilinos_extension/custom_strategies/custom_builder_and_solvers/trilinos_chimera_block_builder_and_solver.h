@@ -1098,20 +1098,14 @@ protected:
             {
                 //assemble the Constraint contribution
                 AssembleConstraint(*it, r_current_process_info);
-                // it->GetDofList(slave_dofs_vector, master_dofs_vector, r_current_process_info);
-                // int node_id = slave_dofs_vector[0]->Id();
-                // auto p_node = (rModelPart.Nodes()(node_id));
-                // KRATOS_INFO_ALL_RANKS("#### slave node id : ")<<node_id<<"  ,  is slave ; "<<p_node->Is(SLAVE)
-                //                                                         <<" PARTITION_ INDEX : "<<p_node->GetSolutionStepValue(PARTITION_INDEX)<<std::endl;
-
                 ++assembled_count;
             }
         }
 
         const DataCommunicator& r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
         int num_local = mGlobalMasterSlaveConstraints.size();
-        KRATOS_INFO_ALL_RANKS("#### Total number of global constraints : ")<<r_comm.SumAll(num_local)<<std::endl;
-        KRATOS_INFO_ALL_RANKS("#### Number of local global constraints : ")<<num_local<<" number assembled : "<<assembled_count <<std::endl;
+        // KRATOS_INFO_ALL_RANKS("#### Total number of global constraints : ")<<r_comm.SumAll(num_local)<<std::endl;
+        // KRATOS_INFO_ALL_RANKS("#### Number of local global constraints : ")<<num_local<<" number assembled : "<<assembled_count <<std::endl;
 
         KRATOS_CATCH("TrilinosChimeraBlockBuilderAndSolver::FormulateGlobalMasterSlaveRelations failed ..");
     }
