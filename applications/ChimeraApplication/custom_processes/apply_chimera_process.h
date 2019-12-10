@@ -741,8 +741,8 @@ protected:
                         // p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
                         // p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
                         rModelpart.Nodes().push_back(p_node);
-                        //if(p_node_p_index != mpi_rank)
-                        //    mRemoteNodes.push_back(p_node->Id());
+                        // if(p_node_p_index != mpi_rank)
+                        //     mRemoteNodes.push_back(p_node->Id());
                     //}
                  }
         }
