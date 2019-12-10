@@ -109,7 +109,12 @@ namespace Kratos
 				Matrix ConstitutiveMatrix(StrainVector.size(), StrainVector.size());
 				noalias(ConstitutiveMatrix) = ZeroMatrix(StrainVector.size(), StrainVector.size());
 
-				this->CalculateLinearElasticMatrix(ConstitutiveMatrix, MaterialProperties);
+				if (Options.Is(ConstitutiveLaw::USE_ELEMENT_PROVIDED_CONSTITUTIVE_TENSOR)){
+					ConstitutiveMatrix = rValues.GetConstitutiveMatrix();
+				} else {
+					this->CalculateLinearElasticMatrix(ConstitutiveMatrix, MaterialProperties);
+				}
+
 				this->CalculateStress(StrainVector, ConstitutiveMatrix, StressVector);
 			}
 		}

@@ -340,7 +340,7 @@ void MembraneElement::AddPreStressPk2(Vector& rStress, const array_1d<Vector,2>&
 
 void MembraneElement::StressPk2(Vector& rStress,
     const Matrix& rReferenceContraVariantMetric,const Matrix& rReferenceCoVariantMetric,const Matrix& rCurrentCoVariantMetric,
-    const array_1d<Vector,2>& rTransformedBaseVectors,const Matrix& rTransformationMatrix)
+    const array_1d<Vector,2>& rTransformedBaseVectors,const Matrix& rTransformationMatrix, array_1d<bool,3>& rWrinklingStateArray)
 {
     Vector strain_vector = ZeroVector(3);
     rStress = ZeroVector(3);
@@ -349,13 +349,68 @@ void MembraneElement::StressPk2(Vector& rStress,
 
     ProcessInfo temp_process_information;
     ConstitutiveLaw::Parameters element_parameters(GetGeometry(),GetProperties(),temp_process_information);
+
+    Matrix material_tangent_modulus = ZeroMatrix(3);
     element_parameters.SetStrainVector(strain_vector);
     element_parameters.SetStressVector(rStress);
+    element_parameters.SetConstitutiveMatrix(material_tangent_modulus);
     element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
     element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
+    element_parameters.Set(ConstitutiveLaw::COMPUTE_CONSTITUTIVE_TENSOR);
     mpConstitutiveLaw->CalculateMaterialResponse(element_parameters,ConstitutiveLaw::StressMeasure_PK2);
 
     AddPreStressPk2(rStress,rTransformedBaseVectors);
+
+
+
+    //// check wrinkling
+    // rWrinklingStateArray (taut,wrinkled,slack)
+    Vector wrinkling_direction = ZeroVector(3);
+    CheckWrinklingState(rWrinklingStateArray,rStress,strain_vector,wrinkling_direction);
+
+
+    // slack
+    if (rWrinklingStateArray[2]){
+        rStress = ZeroVector(3);
+    }
+    // wrinkling
+    else if (rWrinklingStateArray[1]){
+
+        Matrix wrinkling_operation_vector = ZeroMatrix(3,1);
+        wrinkling_operation_vector(0,0) = wrinkling_direction[0]*wrinkling_direction[0];
+        wrinkling_operation_vector(1,0) = wrinkling_direction[1]*wrinkling_direction[1];
+        wrinkling_operation_vector(2,0) = 2.0*wrinkling_direction[0]*wrinkling_direction[1];
+
+        rStress = ZeroVector(3);
+        ConstitutiveLaw::Parameters wrinkled_element_parameters(GetGeometry(),GetProperties(),temp_process_information);
+        wrinkled_element_parameters.SetStrainVector(strain_vector);
+        wrinkled_element_parameters.SetStressVector(rStress);
+        wrinkled_element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
+        wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
+        wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_CONSTITUTIVE_TENSOR);
+
+        // change C
+        // set C
+        Matrix material_tangent_modulus_modified = ZeroMatrix(3);
+        material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector);
+        material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector));
+        material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
+
+        Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector);
+        scale_mat_vec = prod(trans(wrinkling_operation_vector),scale_mat_vec);
+
+        material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
+        material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified;
+
+
+        wrinkled_element_parameters.SetConstitutiveMatrix(material_tangent_modulus_modified);
+        mpConstitutiveLaw->CalculateMaterialResponse(wrinkled_element_parameters,ConstitutiveLaw::StressMeasure_PK2);
+
+        AddPreStressPk2(rStress,rTransformedBaseVectors);
+    }
+
+    // else: taut, do nothing special
+
 }
 
 void MembraneElement::MaterialTangentModulus(Matrix& rTangentModulus,const Matrix& rReferenceContraVariantMetric,
@@ -549,6 +604,8 @@ void MembraneElement::InternalForces(Vector& rInternalForces,const IntegrationMe
     array_1d<Vector,2> reference_covariant_base_vectors;
     array_1d<Vector,2> reference_contravariant_base_vectors;
 
+    array_1d<bool,3> wrinkling_state_array;
+
     array_1d<Vector,2> transformed_base_vectors;
 
     Matrix covariant_metric_current = ZeroMatrix(3);
@@ -580,7 +637,8 @@ void MembraneElement::InternalForces(Vector& rInternalForces,const IntegrationMe
 
         JacobiDeterminante(detJ,reference_covariant_base_vectors);
         StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,
-            covariant_metric_current,transformed_base_vectors,inplane_transformation_matrix_material);
+            covariant_metric_current,transformed_base_vectors,inplane_transformation_matrix_material,
+            wrinkling_state_array);
 
         for (SizeType dof_r=0;dof_r<number_dofs;++dof_r)
         {
@@ -643,6 +701,8 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
     array_1d<Vector,2> reference_contravariant_base_vectors;
     array_1d<Vector,2> transformed_base_vectors;
 
+    array_1d<bool,3> wrinkling_state_array;
+
     Matrix covariant_metric_current = ZeroMatrix(3);
     Matrix covariant_metric_reference = ZeroMatrix(3);
     Matrix contravariant_metric_reference = ZeroMatrix(3);
@@ -671,7 +731,7 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
 
         JacobiDeterminante(detJ,reference_covariant_base_vectors);
         StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
-            transformed_base_vectors,inplane_transformation_matrix_material);
+            transformed_base_vectors,inplane_transformation_matrix_material,wrinkling_state_array);
 
         Matrix material_tangent_modulus = ZeroMatrix(dimension);
         MaterialTangentModulus(material_tangent_modulus,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
@@ -1050,7 +1110,8 @@ void MembraneElement::PrincipleVector(Vector& rPrincipleVector, const Vector& rN
     rPrincipleVector[1] = 0.50 * (rNonPrincipleVector[0]+rNonPrincipleVector[1]) - std::sqrt(0.25*(std::pow(rNonPrincipleVector[0]-rNonPrincipleVector[1],2.0)) + std::pow(rNonPrincipleVector[2],2.0));
 }
 
-void MembraneElement::CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray, const Vector& rStress, const Vector& rStrain)
+void MembraneElement::CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray, const Vector& rStress, const Vector& rStrain,
+    Vector& rWrinklingDirection)
 {
     // rWrinklingStateArray (taut,wrinkled,slack)
     const double numerical_limit = std::numeric_limits<double>::epsilon();
@@ -1069,20 +1130,30 @@ void MembraneElement::CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray
     const double max_strain = std::max(principle_strains[0],principle_strains[1]);
 
     if (min_stress > 0.0){
+        // taut
         rWrinklingStateArray[0] = true;
         rWrinklingStateArray[1] = false;
         rWrinklingStateArray[2] = false;
     } else if ((max_strain > 0.0) && (min_stress < numerical_limit)){
+        // wrinkled
         rWrinklingStateArray[0] = false;
         rWrinklingStateArray[1] = true;
         rWrinklingStateArray[2] = false;
     } else if (max_strain<numerical_limit){
+        // slack
         rWrinklingStateArray[0] = false;
         rWrinklingStateArray[1] = false;
         rWrinklingStateArray[2] = true;
     }
-    else KRATOS_ERROR << "error in principle direction calcualtion of membrane element with id " << Id() << std::endl;
+    else KRATOS_ERROR << "error in principle direction calculation of membrane element with id " << Id() << std::endl;
 
+    rWrinklingDirection = ZeroVector(3);
+    //using the stress -> change this for orthotropic cases
+    const double alpha_2 = std::atan((2.0*rStress[2])/(rStress[0]-rStress[1]));
+    const double beta = (M_PI-alpha_2)/2.0;
+
+    rWrinklingDirection[0] = std::cos(beta);
+    rWrinklingDirection[1] = std::sin(beta);
 }
 
 //***********************************************************************************

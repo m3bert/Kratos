@@ -125,7 +125,7 @@ namespace Kratos
 
     void StressPk2(Vector& rStress,
       const Matrix& rReferenceContraVariantMetric,const Matrix& rReferenceCoVariantMetric,const Matrix& rCurrentCoVariantMetric,
-      const array_1d<Vector,2>& rTransformedBaseVectors, const Matrix& rTransformationMatrix);
+      const array_1d<Vector,2>& rTransformedBaseVectors, const Matrix& rTransformationMatrix, array_1d<bool,3>& rWrinklingStateArray);
 
     void AddPreStressPk2(Vector& rStress, const array_1d<Vector,2>& rTransformedBaseVectors);
 
@@ -205,7 +205,8 @@ namespace Kratos
 
     void PrincipleVector(Vector& rPrincipleVector, const Vector& rNonPrincipleVector);
 
-    void CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray, const Vector& rStress, const Vector& rStrain);
+    void CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray, const Vector& rStress, const Vector& rStrain,
+      Vector& rWrinklingDirection);
 
 protected:
   ConstitutiveLaw::Pointer mpConstitutiveLaw = nullptr;
