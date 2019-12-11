@@ -180,7 +180,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         #print("*****BEFORE REMESH*****")
         #for node in self._solver.fluid_solver.main_model_part.Nodes:
         #    print("Id: {}, X: {}, Y: {}".format(node.Id, node.X, node.Y))
-        #self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
+        self._solver.AuxiliarCallsBeforeRemesh()#TODO try to move this right after solving the thermal problem
         
         # processes to be executed at the begining of the solution step
         self.model_processes.ExecuteInitializeSolutionStep()
@@ -195,7 +195,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         for process in self._GetListOfProcesses():
             process.ExecuteInitializeSolutionStep()
 
-        #self.GraphicalOutputExecuteInitializeSolutionStep()
+        self.GraphicalOutputExecuteInitializeSolutionStep()
 
         # solve time step
         self._solver.InitializeSolutionStep()
@@ -208,7 +208,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
         """
         self.clock_time = self.StartTimeMeasuring()
         self._GetSolver().FinalizeSolutionStep()
-        #self.GraphicalOutputExecuteFinalizeSolutionStep()
+        self.GraphicalOutputExecuteFinalizeSolutionStep()
 
         # processes to be executed at the end of the solution step
         self.model_processes.ExecuteFinalizeSolutionStep() # it calculates the volume after the remeshing process
@@ -221,7 +221,7 @@ class PfemFluidDynamicsAnalysis(AnalysisStage):
             process.ExecuteBeforeOutputStep()
 
         # write output results GiD: (frequency writing is controlled internally)
-        #self.GraphicalOutputPrintOutput()
+        self.GraphicalOutputPrintOutput()
 
         # processes to be executed after witting the output
         self.model_processes.ExecuteAfterOutputStep() #this process remesh the fluid domains if the flag "meshing_before_output" is set to false
