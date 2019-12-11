@@ -135,25 +135,23 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
     def ImportModelPart(self):
         # Call the fluid solver to import the model part from the mdpa
         self.fluid_solver._ImportModelPart(self.fluid_solver.main_model_part,self.settings["fluid_solver_settings"]["model_import_settings"]) # import model fluid model part and call pfem_check_and_prepare_model_process_fluid
-        self.CloneThermalModelPart()
-
-    def CloneThermalModelPart(self):
+        
         # Save the convection diffusion settings
         convection_diffusion_settings = self.thermal_solver.main_model_part.ProcessInfo.GetValue(KratosMultiphysics.CONVECTION_DIFFUSION_SETTINGS)
 
-        # Here the structural model part is cloned to be thermal model part so that the nodes are shared
+        # Here the pfem model part is cloned to be the thermal model part so that the nodes are shared
         modeler = KratosMultiphysics.ConnectivityPreserveModeler()
         if self.domain_size == 2:
             modeler.GenerateModelPart(self.fluid_solver.main_model_part,
                                       self.thermal_solver.main_model_part,
-        #                              "EulerianConvDiff2D",
+                                      "EulerianConvDiff2D",
                                       "ThermalFace2D2N")
         else:
             modeler.GenerateModelPart(self.fluid_solver.main_model_part,
                                       self.thermal_solver.main_model_part,
                                       "EulerianConvDiff3D",
                                       "ThermalFace3D3N")
-        #self.UpdateThermalElements()
+        
         # Set the saved convection diffusion settings to the new thermal model part
         self.thermal_solver.main_model_part.ProcessInfo.SetValue(KratosMultiphysics.CONVECTION_DIFFUSION_SETTINGS, convection_diffusion_settings)
 
@@ -163,14 +161,16 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
 
     def GetComputingModelPart(self):
         return self.fluid_solver.GetComputingModelPart()
+        print("used method GetComputingModelPart")
 
     def ComputeDeltaTime(self):
         return self.fluid_solver._ComputeDeltaTime()
+        print("used method ComputeDeltaTime")
 
     def GetMinimumBufferSize(self):
         buffer_size_fluid = self.fluid_solver.GetMinimumBufferSize()
         buffer_size_thermal = self.thermal_solver.GetMinimumBufferSize()
-        self.thermal_solver.main_model_part.SetBufferSize(max(buffer_size_fluid, buffer_size_thermal)) 
+        #self.thermal_solver.main_model_part.SetBufferSize(max(buffer_size_fluid, buffer_size_thermal)) 
         return max(buffer_size_fluid, buffer_size_thermal)
 
     def Initialize(self):
@@ -206,10 +206,8 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         self.thermal_solver.Predict()
 
     def SolveSolutionStep(self):
-        
+        #TODO: add two-way coupling
         fluid_is_converged = self.fluid_solver.SolveSolutionStep()
-        #print("fluid elem number: {}, thermal elem number: {}".format(len(self.fluid_solver.GetComputingModelPart().GetElements()), len(self.thermal_solver.GetComputingModelPart().GetElements())))
-        #print("fluid nodes number: {}, thermal nodes number: {}".format(len(self.fluid_solver.main_model_part.GetNodes()), len(self.thermal_solver.main_model_part.GetNodes())))
         self.UpdateMeshVelocity()
         thermal_is_converged = self.thermal_solver.SolveSolutionStep()
         return (fluid_is_converged and thermal_is_converged)
@@ -241,41 +239,9 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         Keyword arguments:
         self -- It signifies an instance of a class.
         """
-        #print("*****BEFORE REMESHING PROCESS*****")
-        #for elem in self.fluid_solver.main_model_part.Elements:
-        #    if len(elem.GetNodes())==2: 
-        #        print("Fluid elem Id: {}".format(elem.Id))
-        #for elem in self.thermal_solver.main_model_part.Elements:
-        #    print("Therm elem Id: {}".format(elem.Id))
-
-        # We clean the computing before remesh
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.GetComputingModelPart().Nodes)
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
+        
         KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Elements)
-        
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Nodes)
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Conditions)
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Elements)
-        #print(1)
-        #self.thermal_solver.main_model_part.RemoveNodes(KratosMultiphysics.TO_ERASE)
-        #self.thermal_solver.main_model_part.RemoveElements(KratosMultiphysics.TO_ERASE)
-        
-        #self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
         self.thermal_solver.main_model_part.RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        #self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
-        #self.thermal_solver.GetComputingModelPart().RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
-        #self.thermal_solver.GetComputingModelPart().RemoveConditionsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        #self.thermal_solver.GetComputingModelPart().RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        
-        # We remove the thermal computing domain 
-        #self.thermal_solver.main_model_part.RemoveSubModelPart(self.thermal_solver.GetComputingModelPart())
-        
-        # We create the thermal computing domain
-        #self.thermal_solver.main_model_part.CreateSubModelPart("thermal_computing_domain")
-        
-        # We want to avoid the removal of the fluid nodes in the next remesh process
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Nodes)
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, False, self.fluid_solver.main_model_part.Elements)
         
     def AuxiliarCallsAfterRemesh(self):
         """ This method is executed right after execute the remesh
@@ -285,18 +251,12 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         """
         self.thermal_solver.main_model_part.RemoveNodesFromAllLevels(KratosMultiphysics.TO_ERASE)
         self.UpdateThermalNodes()
-        #self.DeleteThermalElements()
         self.UpdateThermalElements()
-        print("Number of thermal nodes:", self.thermal_solver.GetComputingModelPart().NumberOfNodes())
-        print("Number of thermal elements:", self.thermal_solver.GetComputingModelPart().NumberOfElements())
         
     def PrepareModelPart(self):
-        #self.GetMinimumBufferSize()
         self.fluid_solver.PrepareModelPart()
-        self.UpdateThermalElements()
         self.thermal_solver.PrepareModelPart()
-        print(1)
-
+        
     def UpdateThermalNodes(self):
         for FluidNode in self.fluid_solver.GetComputingModelPart().Nodes:#main_model_part
             ThereIsNode = False
@@ -309,36 +269,15 @@ class CoupledPfemFluidThermalSolver(PythonSolver):
         #KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.NODES).Execute()
     
     def UpdateThermalElements(self):
-        #KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.main_model_part.Elements)
-        #self.thermal_solver.main_model_part.RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        if not self.thermal_solver.main_model_part.HasSubModelPart("thermal_computing_domain"):
-            self.thermal_solver.main_model_part.CreateSubModelPart("thermal_computing_domain")
         modeler = KratosMultiphysics.ConnectivityPreserveModeler()
-        # for FluidElement in self.fluid_solver.GetComputingModelPart().Elements:
-        #     #node_id = FluidNode.Id
-        #     ThereIsElement = False
-        #     for ThermalElement in self.thermal_solver.GetComputingModelPart().Elements:
-        #         if ThermalElement.Id == FluidElement.Id: 
-        #             ThereIsElement = True
-        #             break
-        #     if not ThereIsElement:
-        #         #TODO: manage 3D case
-        #         modeler.CloneElement(FluidElement,
-        #                             self.fluid_solver.GetComputingModelPart(),
-        #                             self.thermal_solver.GetComputingModelPart(),
-        #                             "EulerianConvDiff2D")
-
-
         for FluidElement in self.fluid_solver.GetComputingModelPart().Elements:
             if len(FluidElement.GetNodes())==3:
                 modeler.CloneElement(FluidElement,
                     self.fluid_solver.GetComputingModelPart(),
                     self.thermal_solver.GetComputingModelPart(),
                     "EulerianConvDiff2D")
-        #KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ELEMENTS).Execute()
-        
-    def DeleteThermalElements(self):
-        KratosMultiphysics.VariableUtils().SetFlag(KratosMultiphysics.TO_ERASE, True, self.thermal_solver.GetComputingModelPart().Elements)
-        self.thermal_solver.GetComputingModelPart().RemoveElementsFromAllLevels(KratosMultiphysics.TO_ERASE)
-        
+            else:
+                print(1)
+                #TODO: manage 3D case
+        #KratosMultiphysics.FastTransferBetweenModelPartsProcess(self.thermal_solver.GetComputingModelPart(), self.thermal_solver.main_model_part, KratosMultiphysics.FastTransferBetweenModelPartsProcess.EntityTransfered.ELEMENTS).Execute()   
     
