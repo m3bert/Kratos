@@ -32,6 +32,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
 {
     KRATOS_TRY;
     std::vector<IndexType> vector_of_node_ids;
+    std::vector<IndexType> vector_of_elem_ids;
 
     int count = 0;
 
@@ -63,7 +64,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
             i_element.Set(ACTIVE, false);
             IndexType num_nodes_per_elem = i_element.GetGeometry().PointsNumber();
             if (Side == ChimeraHoleCuttingUtility::SideToExtract::INSIDE)
-                rRemovedModelPart.AddElement(rModelPart.pGetElement(i_element.Id()));
+                vector_of_elem_ids.push_back( i_element.Id() );
             for (j = 0; j < num_nodes_per_elem; j++)
             {
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_X, 0) =
@@ -93,25 +94,18 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
                 count++;
                 IndexType num_nodes_per_elem =
                     i_element.GetGeometry().PointsNumber(); // Size()
-                rRemovedModelPart.AddElement(
-                    rModelPart.pGetElement(i_element.Id())); // AddElement()
+                vector_of_elem_ids.push_back( i_element.Id() );
                 for (j = 0; j < num_nodes_per_elem; j++)
                     vector_of_node_ids.push_back(i_element.GetGeometry()[j].Id());
             }
         }
     }
 
+    rRemovedModelPart.AddElements(vector_of_elem_ids);
     // sorting and making unique list of node ids
     std::set<IndexType> s(vector_of_node_ids.begin(), vector_of_node_ids.end());
     vector_of_node_ids.assign(s.begin(), s.end());
-
-    // Add unique nodes in the ModelPart
-    for (auto i_node_id = vector_of_node_ids.begin();
-         i_node_id != vector_of_node_ids.end(); i_node_id++)
-    {
-        Node<3>::Pointer pnode = rModelPart.Nodes()(*i_node_id);
-        rRemovedModelPart.AddNode(pnode);
-    }
+    rRemovedModelPart.AddNodes(vector_of_node_ids);
 
     // Taking care of the communicator stuff.
     const auto &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
@@ -253,7 +247,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
     const bool &is_distributed = r_comm.IsDistributed();
     const auto &r_interface_mesh = r_comm.InterfaceMesh();
-    const auto &r_local_mesh = r_comm.LocalMesh();
+    // const auto &r_local_mesh = r_comm.LocalMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -402,15 +396,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     std::set<IndexType> sort_set(vector_of_node_ids.begin(),
                                  vector_of_node_ids.end());
     vector_of_node_ids.assign(sort_set.begin(), sort_set.end());
-
-    for (const auto &i_node_id : vector_of_node_ids)
-    {
-        // Adding the nodes to the rExtractedBoundaryModelPart
-        if(r_local_mesh.HasNode(i_node_id)){
-            Node<3>::Pointer pnode = rVolumeModelPart.Nodes()(i_node_id);
-            rExtractedBoundaryModelPart.AddNode(pnode);
-        }
-    }
+    rExtractedBoundaryModelPart.AddNodes(vector_of_node_ids);
 
     // for multipatch
     const int num_nodes =
