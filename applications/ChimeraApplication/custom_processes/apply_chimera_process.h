@@ -719,7 +719,7 @@ protected:
     {
         const DataCommunicator &r_comm = rModelpart.GetCommunicator().GetDataCommunicator();
         const int mpi_size = r_comm.Size();
-        const int mpi_rank = r_comm.Rank();
+        // const int mpi_rank = r_comm.Rank();
         std::vector<NodesContainerType> RecvNodes(mpi_size);
         BuiltinTimer send_recv_nodes;
         rModelpart.GetCommunicator().TransferObjects(rSendNodes, RecvNodes);
@@ -731,20 +731,8 @@ protected:
         {
             for (NodesContainerType::iterator it = RecvNodes[i].begin();
                  it != RecvNodes[i].end(); ++it){
-                // if (rModelpart.Nodes().find(it->Id()) ==
-                //     rModelpart.Nodes().end()){
                         auto p_node = *it.base();
-                        // const int p_node_p_index = p_node->GetSolutionStepValue(PARTITION_INDEX);
-                        // auto p_new_node = mrMainModelPart.CreateNewNode(p_node->Id(), *p_node);
-                        // p_new_node->AddDof(VELOCITY_X, REACTION_X);
-                        // p_new_node->AddDof(VELOCITY_Y, REACTION_Y);
-                        // p_new_node->AddDof(VELOCITY_Z, REACTION_Z);
-                        // p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
-                        // p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
                         rModelpart.Nodes().push_back(p_node);
-                        // if(p_node_p_index != mpi_rank)
-                        //     mRemoteNodes.push_back(p_node->Id());
-                    //}
                  }
         }
         double time_add_nodes = add_nodes.ElapsedSeconds();
@@ -834,7 +822,6 @@ private:
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took         : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
 
-            current_model.DeleteModelPart("ModifiedPatch");
             return r_modified_patch_boundary_model_part;
         }
         else
