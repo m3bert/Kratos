@@ -11,38 +11,15 @@
 
 #if !defined(KRATOS_FORMFINDING_UPDATED_REFERENCE_STRATEGY )
 #define  KRATOS_FORMFINDING_UPDATED_REFERENCE_STRATEGY
-// System includes
-
-// External includes
 
 // Project includes
 #include "solving_strategies/strategies/residualbased_newton_raphson_strategy.h"
 #include "includes/gid_io.h"
+#include "custom_utilities/project_vector_on_surface_utility.h"
 
 
 namespace Kratos
 {
-
-    ///@name Kratos Globals
-    ///@{
-
-
-    ///@}
-    ///@name Type Definitions
-    ///@{
-
-    ///@}
-
-
-    ///@name  Enum's
-    ///@{
-
-
-    ///@}
-    ///@name  Functions
-    ///@{
-
-
     ///@}
     ///@name Kratos Classes
     ///@{
@@ -179,39 +156,19 @@ namespace Kratos
 
             BaseType::SolveSolutionStep();
 
-            if (mPrintIterations)
+            if (mPrintIterations){
                 mpIterationIO->FinalizeResults();
+                KRATOS_WATCH(mPrintIterations)
+            }
+
 
             return true;
         }
 
           ///@}
-          ///@name Operators
-
-          ///@{
-
-          ///@}
-          ///@name Operations
-          ///@{
-
-
-          ///@}
-          ///@name Access
-
-          ///@{
 
 
     protected:
-        ///@name Protected static Member Variables
-        ///@{
-
-
-        ///@}
-        ///@name Protected member Variables
-        ///@{
-
-
-        ///@}
         ///@name Protected Operators
         ///@{
 
@@ -222,123 +179,58 @@ void UpdateDatabase(
         const bool MoveMesh
     ) override
     {
-        if(mIncludeLineSearch == false){
-            BaseType::UpdateDatabase(A,Dx, b, MoveMesh);
+        BaseType::UpdateDatabase(A,Dx, b, MoveMesh);
+        ModelPart& r_model_part = BaseType::GetModelPart();
+        for(auto& r_node : r_model_part.Nodes()){
+            const array_1d<double, 3>& disp = r_node.FastGetSolutionStepValue(DISPLACEMENT);
+            const array_1d<double, 3>& step_disp = r_node.GetValue(VELOCITY);
+            // if(r_node.Id()==122){
+            //     KRATOS_WATCH(disp)
+            //     KRATOS_WATCH(r_node.Y0())
+            //     KRATOS_WATCH(step_disp)
+            // }
+            r_node.GetValue(VELOCITY) += r_node.FastGetSolutionStepValue(DISPLACEMENT);
+            // Updating reference
+            r_node.X0() += disp[0];
+            r_node.Y0() += disp[1];
+            r_node.Z0() += disp[2];
+
+            // if(r_node.Id()==122){
+            //     KRATOS_WATCH(disp)
+            //     KRATOS_WATCH(r_node.Y0())
+            //     KRATOS_WATCH(step_disp)
+            // }
+
+            r_node.FastGetSolutionStepValue(DISPLACEMENT) = ZeroVector(3);
+
+            // if(r_node.Id()==122){
+            //     KRATOS_WATCH(disp)
+            //     KRATOS_WATCH(r_node.Y0())
+            //     KRATOS_WATCH(step_disp)
+            // }
         }
-        else{
-            typename TSchemeType::Pointer pScheme = this->GetScheme();
-            typename TBuilderAndSolverType::Pointer pBuilderAndSolver = this->GetBuilderAndSolver();
 
-            TSystemVectorType aux(b.size()); //TODO: do it by using the space
-            TSparseSpace::Assign(aux,0.5, Dx);
+        Parameters settings( R"({
+            "model_part_name"  : "Structure",
+            "echo_level"       : 1,
+            "projection_type"  : "radial",
+            "global_direction" : [0,0,1],
+            "variable_name"    : "LOCAL_PRESTRESS_AXIS_1",
+            "method_specific_settings" : { }
+        } )" );
 
-            //compute residual without update
-            TSparseSpace::SetToZero(b);
-            pBuilderAndSolver->BuildRHS(pScheme, BaseType::GetModelPart(), b );
-            double ro = TSparseSpace::TwoNorm(b);
+        ProjectVectorOnSurfaceUtility::Execute(r_model_part, settings);
 
-            //compute half step residual
-            BaseType::UpdateDatabase(A,aux,b,MoveMesh);
-            TSparseSpace::SetToZero(b);
-            std::unordered_map<int,Matrix> prestress;
-            std::unordered_map<int,Matrix> base_1;
-            std::unordered_map<int,Matrix> base_2;
-            for(auto& elem:BaseType::GetModelPart().Elements()){
-                prestress.insert(std::make_pair(elem.Id(),elem.GetValue(MEMBRANE_PRESTRESS)));
-                base_1.insert(std::make_pair(elem.Id(),elem.GetValue(BASE_REF_1)));
-                base_2.insert(std::make_pair(elem.Id(),elem.GetValue(BASE_REF_2)));
-                elem.InitializeNonLinearIteration(BaseType::GetModelPart().GetProcessInfo());
-            }
-            pBuilderAndSolver->BuildRHS(pScheme, BaseType::GetModelPart(), b );
-            double rh = TSparseSpace::TwoNorm(b);
-
-            //compute full step residual (add another half Dx to the previous half)
-            BaseType::UpdateDatabase(A,aux,b,MoveMesh);
-            TSparseSpace::SetToZero(b);
-            for(auto& elem:BaseType::GetModelPart().Elements()){
-                elem.SetValue(MEMBRANE_PRESTRESS,prestress[elem.Id()]);
-                elem.SetValue(BASE_REF_1,base_1[elem.Id()]);
-                elem.SetValue(BASE_REF_2,base_2[elem.Id()]);
-                elem.InitializeNonLinearIteration(BaseType::GetModelPart().GetProcessInfo());
-            }
-            pBuilderAndSolver->BuildRHS(pScheme, BaseType::GetModelPart(), b );
-            double rf = TSparseSpace::TwoNorm(b);
-            //compute optimal (limited to the range 0-1)
-            //parabola is y = a*x^2 + b*x + c -> min/max for
-            //x=0   --> r=ro
-            //x=1/2 --> r=rh
-            //x=1   --> r =
-            //c= ro,     b= 4*rh -rf -3*ro,  a= 2*rf - 4*rh + 2*ro
-            //max found if a>0 at the position  xmax = (rf/4 - rh)/(rf - 2*rh);
-            double parabola_a = 2*rf + 2*ro - 4*rh;
-            double parabola_b = 4*rh - rf - 3*ro;
-            double xmin = 1.0e-3;
-            double xmax = 1.0;
-            if( parabola_a > 0.0) //if parabola has a local minima
-            {
-                xmax = -0.5 * parabola_b/parabola_a; // -b / 2a
-                if( xmax > 1.0)
-                    xmax = 1.0;
-                else if(xmax < 0.0)
-                    xmax = xmin;
-            }
-            else //parabola degenerates to either a line or to have a local max. best solution on either extreme
-            {
-                if(rf < ro)
-                    xmax = 1.0;
-                else
-                    xmax = xmin; //should be zero, but otherwise it will stagnate
-            }
-
-            //perform final update
-            TSparseSpace::Assign(aux,-(1.0-xmax), Dx);
-            for(auto& elem:BaseType::GetModelPart().Elements()){
-                elem.SetValue(MEMBRANE_PRESTRESS,prestress[elem.Id()]);
-                elem.SetValue(BASE_REF_1,base_1[elem.Id()]);
-                elem.SetValue(BASE_REF_2,base_2[elem.Id()]);
-            }
-            BaseType::UpdateDatabase(A,aux,b,MoveMesh);
-        }
+        // r_model_part.GetProcessInfo()[STEP] += 1;
+        // r_model_part.GetProcessInfo()[TIME] += 0.1;
     }
 
-        ///@}
-        ///@name Protected Operations
-        ///@{
-
-
-
-        ///@}
-        ///@name Protected  Access
-        ///@{
-
-
-        ///@}
-        ///@name Protected Inquiry
-        ///@{
-
-
-        ///@}
-        ///@name Protected LifeCycle
-        ///@{
-
-
-
-        ///@}
-
     private:
-        ///@name Static Member Variables
-        ///@{
-
-
-        ///@}
         ///@name Member Variables
         ///@{
-
         bool mPrintIterations;
         bool mIncludeLineSearch;
         IterationIOPointerType mpIterationIO;
-
-
         ///@}
         ///@name Private Operators
         ///@{
@@ -376,19 +268,9 @@ void UpdateDatabase(
             mpIterationIO->WriteNodeMesh(BaseType::GetModelPart().GetMesh());
             mpIterationIO->FinalizeMesh();
         }
-
-
         ///@}
     }; /* Class FormfindingUpdatedReferenceStrategy */
-
        ///@}
-
-       ///@name Type Definitions
-       ///@{
-
-
-       ///@}
-
 } /* namespace Kratos. */
 
 #endif /* KRATOS_FORMFINDING_UPDATED_REFERENCE_STRATEGY defined */

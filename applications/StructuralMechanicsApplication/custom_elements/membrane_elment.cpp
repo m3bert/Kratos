@@ -634,9 +634,12 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
     rStiffnessMatrix = ZeroMatrix(number_dofs);
 
     const GeometryType::ShapeFunctionsGradientsType& r_shape_functions_gradients = r_geom.ShapeFunctionsLocalGradients(ThisMethod);
+    //KRATOS_WATCH(r_shape_functions_gradients)
     const GeometryType::IntegrationPointsArrayType& r_integration_points = r_geom.IntegrationPoints(ThisMethod);
+    //KRATOS_WATCH(r_integration_points)
 
     const double thickness = GetProperties()[THICKNESS];
+    //KRATOS_WATCH(thickness)
 
     array_1d<Vector,2> current_covariant_base_vectors;
     array_1d<Vector,2> reference_covariant_base_vectors;
@@ -651,6 +654,11 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
     Vector stress = ZeroVector(3);
     Vector derivative_strain = ZeroVector(3);
 
+    if(this->Id()==6){
+        KRATOS_WATCH(r_geom.GetPoint(0).Id())
+        KRATOS_WATCH(r_geom.GetPoint(0).Y0())
+    }
+
     for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
         // getting information for integration
         const double integration_weight_i = r_integration_points[point_number].Weight();
@@ -658,16 +666,24 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
 
         CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,"current");
         CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,"reference");
+        // KRATOS_WATCH(current_covariant_base_vectors)
+        // KRATOS_WATCH(reference_covariant_base_vectors)
 
         CovariantMetric(covariant_metric_current,current_covariant_base_vectors);
         CovariantMetric(covariant_metric_reference,reference_covariant_base_vectors);
         ContravariantMetric(contravariant_metric_reference,covariant_metric_reference);
+        // KRATOS_WATCH(covariant_metric_current)
+        // KRATOS_WATCH(covariant_metric_reference)
+        // KRATOS_WATCH(contravariant_metric_reference)
 
         ContraVariantBaseVectors(reference_contravariant_base_vectors,contravariant_metric_reference,reference_covariant_base_vectors);
+        //KRATOS_WATCH(reference_contravariant_base_vectors)
 
         TransformBaseVectors(transformed_base_vectors,reference_contravariant_base_vectors);
+        //KRATOS_WATCH(transformed_base_vectors)
 
         InPlaneTransformationMatrix(inplane_transformation_matrix_material,transformed_base_vectors,reference_contravariant_base_vectors);
+        //KRATOS_WATCH(inplane_transformation_matrix_material)
 
         JacobiDeterminante(detJ,reference_covariant_base_vectors);
         StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
@@ -685,13 +701,14 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
                     if (point_number==(r_integration_points.size()-1)) rStiffnessMatrix(dof_s,dof_r) = rStiffnessMatrix(dof_r,dof_s);
                 }
                 else{
-                    MaterialStiffnessMatrixEntryIJ(rStiffnessMatrix(dof_s,dof_r),
+                    double temp_entry = 0.0;
+                    MaterialStiffnessMatrixEntryIJ(temp_entry,
                         material_tangent_modulus,dof_s,dof_r,shape_functions_gradients_i,
                         current_covariant_base_vectors,inplane_transformation_matrix_material);
-                    InitialStressStiffnessMatrixEntryIJ(rStiffnessMatrix(dof_s,dof_r),
+                    InitialStressStiffnessMatrixEntryIJ(temp_entry,
                         stress,dof_s,dof_r,shape_functions_gradients_i,
                         inplane_transformation_matrix_material);
-                    rStiffnessMatrix(dof_s,dof_r) *= detJ*integration_weight_i*thickness;
+                    rStiffnessMatrix(dof_s,dof_r) += temp_entry*detJ*integration_weight_i*thickness;
                 }
             }
         }

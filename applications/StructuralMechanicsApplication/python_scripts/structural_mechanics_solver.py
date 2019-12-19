@@ -131,6 +131,7 @@ class MechanicalSolver(PythonSolver):
         # this can safely be called also for restarts, it is internally checked if the variables exist already
         # Add displacements.
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.DISPLACEMENT)
+        self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.VELOCITY)
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.REACTION)
         # Add specific variables for the problem conditions.
         self.main_model_part.AddNodalSolutionStepVariable(KratosMultiphysics.POSITIVE_FACE_PRESSURE)
@@ -207,7 +208,7 @@ class MechanicalSolver(PythonSolver):
                 mechanical_solution_strategy.SetInitializePerformedFlag(True)
             except AttributeError:
                 pass
-        KratosMultiphysics.Logger.PrintInfo("::[MechanicalSolver]:: ", "Finished initialization.")
+        #KratosMultiphysics.Logger.PrintInfo("::[MechanicalSolver]:: ", "Finished initialization.")
 
     def InitializeSolutionStep(self):
         if self.settings["clear_storage"].GetBool():
@@ -394,6 +395,7 @@ class MechanicalSolver(PythonSolver):
         conv_params.AddValue("displacement_absolute_tolerance",self.settings["displacement_absolute_tolerance"])
         conv_params.AddValue("residual_relative_tolerance",self.settings["residual_relative_tolerance"])
         conv_params.AddValue("residual_absolute_tolerance",self.settings["residual_absolute_tolerance"])
+        conv_params["echo_level"].SetInt(2)
 
         return conv_params
 

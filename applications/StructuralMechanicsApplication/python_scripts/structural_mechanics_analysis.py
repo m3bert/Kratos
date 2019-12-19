@@ -15,6 +15,7 @@ class StructuralMechanicsAnalysis(AnalysisStage):
     """
     def __init__(self, model, project_parameters):
         # Making sure that older cases still work by properly initalizing the parameters
+        print('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
         solver_settings = project_parameters["solver_settings"]
 
         if solver_settings.Has("domain_size") and project_parameters["problem_data"].Has("domain_size"):

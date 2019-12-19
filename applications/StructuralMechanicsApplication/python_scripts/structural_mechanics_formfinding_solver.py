@@ -27,7 +27,7 @@ class FormfindingMechanicalSolver(MechanicalSolver):
     @classmethod
     def GetDefaultSettings(cls):
         this_defaults = KratosMultiphysics.Parameters("""{
-            "print_formfinding_iterations" : false
+            "print_formfinding_iterations" : true
         }""")
         this_defaults.AddMissingParameters(super(FormfindingMechanicalSolver, cls).GetDefaultSettings())
         return this_defaults
