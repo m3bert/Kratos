@@ -3,7 +3,9 @@
 #ifdef KRATOS_USING_MPI
 #include "mpi/utilities/parallel_fill_communicator.h"
 #endif
+#include "processes/find_nodal_neighbours_process.h"
 #include "includes/data_communicator.h"
+#include "input_output/vtk_output.h"
 
 
 namespace Kratos
@@ -20,6 +22,7 @@ void ChimeraHoleCuttingUtility::CreateHoleAfterDistance(
                                                                ChimeraHoleCuttingUtility::Domain::MAIN_BACKGROUND,
                                                                Distance,
                                                                ChimeraHoleCuttingUtility::SideToExtract::INSIDE);
+
     ChimeraHoleCuttingUtility::ExtractBoundaryMesh<TDim>(rHoleModelPart, rHoleBoundaryModelPart);
     KRATOS_CATCH("");
 }
@@ -33,7 +36,6 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
     KRATOS_TRY;
     std::vector<IndexType> vector_of_node_ids;
     std::vector<IndexType> vector_of_elem_ids;
-
     int count = 0;
 
     const auto& r_local_mesh = rModelPart.GetCommunicator().LocalMesh();
@@ -111,9 +113,9 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
     const auto &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
     if (r_comm.IsDistributed())
     {
-        rRemovedModelPart.SetCommunicator(rModelPart.pGetCommunicator());
+        // rRemovedModelPart.SetCommunicator(rModelPart.pGetCommunicator());
 #ifdef KRATOS_USING_MPI
-        // ParallelFillCommunicator(rRemovedModelPart).Execute();
+        ParallelFillCommunicator(rRemovedModelPart).Execute();
 #endif
     }
     KRATOS_CATCH("");
@@ -152,8 +154,15 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
             return seed;
         }
     };
+    const auto &r_comm = rVolumeModelPart.GetCommunicator();
+    const bool &is_distributed = r_comm.IsDistributed();
+    const auto &r_interface_mesh = r_comm.InterfaceMesh();
+    std::map<IndexType, int> num_times_counted_map;
+    const auto &r_local_mesh = r_comm.LocalMesh();
+    const auto &r_ghost_mesh = r_comm.GhostMesh();
+    if(is_distributed)   FindNodalNeighboursProcess(rVolumeModelPart).Execute();
     // Taking care of the communicator stuff.
-    rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
+    // rExtractedBoundaryModelPart.SetCommunicator(rVolumeModelPart.pGetCommunicator());
 
     // IndexType n_nodes = rVolumeModelPart.ElementsBegin()->GetGeometry().size();
     // KRATOS_ERROR_IF(!(n_nodes != 3 || n_nodes != 4))
@@ -244,10 +253,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     // First assign to skin model part all nodes from original model_part,
     // unnecessary nodes will be removed later
     IndexType id_condition = 1;
-    const auto &r_comm = rVolumeModelPart.GetCommunicator();
-    const bool &is_distributed = r_comm.IsDistributed();
-    const auto &r_interface_mesh = r_comm.InterfaceMesh();
-    // const auto &r_local_mesh = r_comm.LocalMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -272,7 +277,8 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                     // Check if all the nodes of this face are on
                     bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
                     ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
-
+                    num_times_counted_map[original_nodes_order[0]] += 1;
+                    num_times_counted_map[original_nodes_order[1]] += 1;
                     if (ghost_face)
                         continue;
                 }
@@ -388,6 +394,51 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 Condition::Pointer p_condition2 = rReferenceTriangleCondition.Create(
                     id_condition++, triangle2, properties);
                 rExtractedBoundaryModelPart.Conditions().push_back(p_condition2);
+            }
+        }
+    }
+
+    // Checking for corner case when an element/condition is isolated
+    if(is_distributed){
+        auto& r_nodes = rVolumeModelPart.Nodes();
+        for(auto& num_counted : num_times_counted_map)
+        {
+            if(num_counted.second > TDim) // 2D case
+            {
+                auto& neighbour_nodes = rVolumeModelPart.Nodes()(num_counted.first)->GetValue(NEIGHBOUR_NODES);
+                for(auto& ne_node : neighbour_nodes)
+                {
+                    if(  r_local_mesh.HasNode(ne_node.Id())  ){
+                        vector<IndexType> edge_ids(2,0);
+                        edge_ids[0] = num_counted.first;
+                        edge_ids[1] = ne_node.Id();
+                        std::sort(edge_ids.begin(), edge_ids.end());
+                        if(ordered_skin_face_nodes_map.count(edge_ids) != 0){
+                            vector_of_node_ids.push_back(ne_node.Id());
+
+                            vector<IndexType> original_nodes_order =
+                                        ordered_skin_face_nodes_map[edge_ids];
+
+                            Node<3>::Pointer pnode1 =
+                                rVolumeModelPart.Nodes()(original_nodes_order[0]);
+                            Node<3>::Pointer pnode2 =
+                                rVolumeModelPart.Nodes()(original_nodes_order[1]);
+
+
+                            Properties::Pointer properties =
+                                rExtractedBoundaryModelPart.rProperties()(0);
+                            Condition const &rReferenceLineCondition =
+                                KratosComponents<Condition>::Get(
+                                    "LineCondition2D2N"); // Condition2D
+
+                            // Skin edges are added as conditions
+                            Line2D2<Node<3>> line1(pnode1, pnode2);
+                            Condition::Pointer p_condition1 =
+                                rReferenceLineCondition.Create(id_condition++, line1, properties);
+                            rExtractedBoundaryModelPart.Conditions().push_back(p_condition1);
+                        }
+                    }
+                }
             }
         }
     }
