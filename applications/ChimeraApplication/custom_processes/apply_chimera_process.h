@@ -239,7 +239,7 @@ protected:
     std::vector<IndexType> mRemoteNodes;
 
     // Modelpart names which are generated here
-    std::string mModifiedhName = "ChimeraModified";
+    std::string mModifiedName = "ChimeraModified";
     std::string mBoundaryName = "ChimeraBoundary";
     std::string mHoleName = "ChimeraHole";
     ///@}
@@ -376,7 +376,7 @@ protected:
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Hole creation took                        : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
-        // WriteModelPart(r_hole_model_part);
+        // WriteModelPart(r_background_boundary_model_part);
         // WriteModelPart(r_background_model_part);
         // WriteModelPart(r_patch_boundary_model_part);
         // WriteModelPart(r_hole_boundary_model_part);
@@ -398,7 +398,7 @@ protected:
 
         r_hole_boundary_model_part.RemoveSubModelPart(mBoundaryName);
         r_background_model_part.RemoveSubModelPart(mHoleName);
-        r_patch_model_part.RemoveSubModelPart(mModifiedhName);
+        r_patch_model_part.RemoveSubModelPart(mModifiedName);
 
         KRATOS_INFO("End of Formulate Chimera") << std::endl;
     }
@@ -801,8 +801,8 @@ private:
         if (!current_model.HasModelPart(patch_boundary_mp_name))
         {
             ModelPart &r_patch_model_part = current_model.GetModelPart(PatchParameters["model_part_name"].GetString());
-            ModelPart &r_modified_patch_model_part = r_patch_model_part.CreateSubModelPart(mModifiedhName);
-            ModelPart &r_modified_patch_boundary_model_part = r_modified_patch_model_part.CreateSubModelPart(mBoundaryName);
+            ModelPart &r_modified_patch_model_part = r_patch_model_part.CreateSubModelPart(mModifiedName);
+            ModelPart &r_modified_patch_boundary_model_part = r_modified_patch_model_part.CreateSubModelPart(mBoundaryName+r_modified_patch_model_part.Name());
             BuiltinTimer distance_calc_time_patch;
             DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::CalculateDistance(r_patch_model_part,
                                                                                                    rBackgroundBoundaryModelpart);
@@ -822,7 +822,7 @@ private:
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took         : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
 
-            return r_modified_patch_boundary_model_part;
+            return r_modified_patch_boundary_model_part; 
         }
         else
         {
@@ -944,7 +944,8 @@ private:
                     "element_flags"                      : [],
                     "nodal_flags"                        : [],
                     "element_data_value_variables"       : [],
-                    "condition_data_value_variables"     : []
+                    "condition_data_value_variables"     : [],
+                    "write_ids"                          :true
                 }
                 )");
 
