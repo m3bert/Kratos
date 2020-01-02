@@ -375,7 +375,7 @@ protected:
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Hole creation took                        : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
-        // WriteModelPart(r_hole_model_part);
+        WriteModelPart(r_hole_model_part);
         // WriteModelPart(r_background_model_part);
         // WriteModelPart(r_modified_patch_boundary_model_part);
         // WriteModelPart(r_hole_boundary_model_part);
@@ -390,8 +390,8 @@ protected:
         }
 
         BuiltinTimer mpc_time;
-        ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
         ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
+        ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took          : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
 
@@ -590,6 +590,7 @@ protected:
         if(is_comm_distributed)
             DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rBoundaryModelPart, gathered_modelpart);
 
+        WriteModelPart(gathered_modelpart);
         std::vector<int> vector_of_non_found_nodes;
         const int n_boundary_nodes = static_cast<int>(gathered_modelpart.Nodes().size());
         std::vector<int> constraints_id_vector;

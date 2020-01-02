@@ -119,7 +119,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
     {
         rRemovedModelPart.SetCommunicator(rModelPart.pGetCommunicator());
 #ifdef KRATOS_USING_MPI
-        // ParallelFillCommunicator(rRemovedModelPart).Execute();
+        ParallelFillCommunicator(rRemovedModelPart).Execute();
 #endif
     }
     KRATOS_CATCH("");
@@ -252,8 +252,9 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     IndexType id_condition = 1;
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
     const bool &is_distributed = r_comm.IsDistributed();
-    const auto &r_ghost_mesh = r_comm.GhostMesh();
+    const auto &r_interface_mesh = r_comm.InterfaceMesh();
     const auto &r_local_mesh = r_comm.LocalMesh();
+    const auto &r_ghost_mesh = r_comm.GhostMesh();
 
     // Add skin faces as triangles to skin-model-part (loop over all node sets)
     std::vector<IndexType> vector_of_node_ids;
@@ -276,11 +277,14 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_ghost_mesh.HasNode(original_nodes_order[0]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[1]);
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
 
-                    if (ghost_face)
+                    if (ghost_face){
+                        if(r_ghost_mesh.HasNode(original_nodes_order[0])) vector_of_node_ids.push_back(original_nodes_order[0]);
+                        if(r_ghost_mesh.HasNode(original_nodes_order[1])) vector_of_node_ids.push_back(original_nodes_order[1]);
                         continue;
+                    }
                 }
                 Node<3>::Pointer pnode1 =
                     rVolumeModelPart.Nodes()(original_nodes_order[0]);
@@ -315,9 +319,9 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_ghost_mesh.HasNode(original_nodes_order[0]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[1]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[2]);
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[2]);
 
                     if (ghost_face)
                         continue;
@@ -356,10 +360,10 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
                 if (is_distributed)
                 {
                     // Check if all the nodes of this face are on
-                    bool ghost_face = r_ghost_mesh.HasNode(original_nodes_order[0]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[1]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[2]);
-                    ghost_face = ghost_face && r_ghost_mesh.HasNode(original_nodes_order[3]);
+                    bool ghost_face = r_interface_mesh.HasNode(original_nodes_order[0]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[1]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[2]);
+                    ghost_face = ghost_face && r_interface_mesh.HasNode(original_nodes_order[3]);
 
                     if (ghost_face)
                         continue;
@@ -465,7 +469,7 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     rExtractedBoundaryModelPart.RemoveNodes(TO_ERASE);
 
 #ifdef KRATOS_USING_MPI
-        ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
+        // ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
 #endif
 
     KRATOS_CATCH("");
