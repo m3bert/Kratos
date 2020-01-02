@@ -736,12 +736,12 @@ protected:
                  }
         }
         double time_add_nodes = add_nodes.ElapsedSeconds();
-        KRATOS_INFO_IF("SynchronizeNodes : Time taken to add nodes                  : ", mEchoLevel > 1) << r_comm.Max(time_add_nodes, 0)  << std::endl;
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken to add nodes               : ", mEchoLevel > 1) << r_comm.Max(time_add_nodes, 0)  << std::endl;
 
         BuiltinTimer unique_nodes;
         rModelpart.Nodes().Unique();
         double time_unique_nodes = add_nodes.ElapsedSeconds();
-        KRATOS_INFO_IF("SynchronizeNodes : Time taken to unique nodes               : ", mEchoLevel > 1) << r_comm.Max(time_unique_nodes, 0) << std::endl;
+        KRATOS_INFO_IF("SynchronizeNodes : Time taken to unique nodes            : ", mEchoLevel > 1) << r_comm.Max(time_unique_nodes, 0) << std::endl;
 
         int temp = rModelpart.Nodes().size();
         KRATOS_ERROR_IF(temp != int(rModelpart.Nodes().size()))
