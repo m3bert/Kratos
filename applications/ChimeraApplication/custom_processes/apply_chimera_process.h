@@ -237,6 +237,11 @@ protected:
     std::map<std::string, PointLocatorPointerType> mPointLocatorsMap;
     bool mIsFormulated;
     std::vector<IndexType> mRemoteNodes;
+
+    // Modelpart names which are generated here
+    std::string mModifiedName = "ChimeraModified";
+    std::string mBoundaryName = "ChimeraBoundary";
+    std::string mHoleName = "ChimeraHole";
     ///@}
     ///@name Protected Operators
     ///@{
@@ -286,32 +291,31 @@ protected:
         for (auto &current_level : mParameters)
         {
             ChimeraHoleCuttingUtility::Domain domain_type = ChimeraHoleCuttingUtility::Domain::MAIN_BACKGROUND;
-            for (auto &background_patch_param : current_level)
-            { // Gives the current background patch
-                background_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
+            for (auto &background_param : current_level)
+            { // Gives the current background
+                background_param.ValidateAndAssignDefaults(parameters_for_validation);
                 Model &current_model = mrMainModelPart.GetModel();
-                ModelPart &r_background_model_part = current_model.GetModelPart(background_patch_param["model_part_name"].GetString());
+                ModelPart &r_background_model_part = current_model.GetModelPart(background_param["model_part_name"].GetString());
                 // compute the outerboundary of the background to save
                 if (i_current_level == 0)
-                {
-                    if (!r_background_model_part.HasSubModelPart("chimera_boundary_mp"))
+                    if (!r_background_model_part.HasSubModelPart(mBoundaryName))
                     {
-                        auto &r_boundary_model_part = r_background_model_part.CreateSubModelPart("chimera_boundary_mp");
+                        auto &r_boundary_model_part = r_background_model_part.CreateSubModelPart(mBoundaryName);
                         BuiltinTimer extraction_time;
                         ChimeraHoleCuttingUtility().ExtractBoundaryMesh<TDim>(r_background_model_part, r_boundary_model_part);
                         KRATOS_INFO_IF("ApplyChimera : Extraction of boundary mesh took          : ", mEchoLevel > 0) << extraction_time.ElapsedSeconds() << " seconds" << std::endl;
                     }
-                }
+
                 for (IndexType i_slave_level = i_current_level + 1; i_slave_level < mNumberOfLevels; ++i_slave_level)
                 {
-                    for (auto &slave_patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
+                    for (auto &patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
                     {
-                        slave_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
-                        KRATOS_INFO_IF("ApplyChimera : Formulating Chimera for the combination   : ", mEchoLevel > 0) << "Background\n" << background_patch_param << "\n Patch \n" << slave_patch_param << std::endl;
+                        patch_param.ValidateAndAssignDefaults(parameters_for_validation);
+                        KRATOS_INFO_IF("ApplyChimera : Formulating Chimera for the combination   : ", mEchoLevel > 0) << "\n\tBackground\n" << background_param << "\n\tPatch \n" << patch_param << std::endl;
                         if (i_current_level == 0) // a check to identify computational Domain boundary
                             domain_type = ChimeraHoleCuttingUtility::Domain::OTHER;
-                        FormulateChimera(background_patch_param, slave_patch_param, domain_type);
-                        mPointLocatorsMap.erase(background_patch_param["model_part_name"].GetString());
+                        FormulateChimera(background_param, patch_param, domain_type);
+                        mPointLocatorsMap.erase(background_param["model_part_name"].GetString());
                     }
                 }
             }
@@ -340,7 +344,7 @@ protected:
         Model &current_model = mrMainModelPart.GetModel();
         const auto &r_comm = mrMainModelPart.GetCommunicator().GetDataCommunicator();
         ModelPart &r_background_model_part = current_model.GetModelPart(BackgroundParam["model_part_name"].GetString());
-        ModelPart &r_background_boundary_model_part = r_background_model_part.GetSubModelPart("chimera_boundary_mp");
+        ModelPart &r_background_boundary_model_part = r_background_model_part.GetSubModelPart(mBoundaryName);
         ModelPart &r_patch_model_part = current_model.GetModelPart(PatchParameters["model_part_name"].GetString());
         const std::string bg_search_mp_name = BackgroundParam["search_model_part_name"].GetString();
         auto &r_background_search_model_part = current_model.HasModelPart(bg_search_mp_name) ? current_model.GetModelPart(bg_search_mp_name) : r_background_model_part;
@@ -356,17 +360,14 @@ protected:
         KRATOS_INFO_IF("ApplyChimera : Creation of search structures took        : ", mEchoLevel > 0) << r_comm.Max(elapsed_search_creation_time, 0) << " seconds" << std::endl;
         KRATOS_ERROR_IF(over_lap_distance < 1e-12) << "Overlap distance should be a positive and non-zero number." << std::endl;
 
-        ModelPart &r_hole_model_part = current_model.CreateModelPart("HoleModelpart");
-        r_hole_model_part.GetProcessInfo().GetValue(STEP) = mrMainModelPart.GetProcessInfo().GetValue(STEP);
-        ModelPart &r_hole_boundary_model_part = current_model.CreateModelPart("HoleBoundaryModelPart");
-        r_hole_boundary_model_part.GetProcessInfo().GetValue(STEP) = mrMainModelPart.GetProcessInfo().GetValue(STEP);
+        ModelPart &r_hole_model_part = r_background_model_part.CreateSubModelPart(mHoleName);
+        ModelPart &r_hole_boundary_model_part = r_hole_model_part.CreateSubModelPart(mBoundaryName);
 
-
-        auto &r_modified_patch_boundary_model_part = ExtractPatchBoundary(PatchParameters, r_background_boundary_model_part, DomainType);
+        auto &r_patch_boundary_model_part = ExtractPatchBoundary(PatchParameters, r_background_boundary_model_part, DomainType);
 
         BuiltinTimer bg_distance_calc_time;
         DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::CalculateDistance(r_background_model_part,
-                                                                                               r_modified_patch_boundary_model_part);
+                                                                                               r_patch_boundary_model_part);
         auto bg_distance_calc_time_elapsed = bg_distance_calc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Distance calculation on background took   : ", mEchoLevel > 0) << r_comm.Max(bg_distance_calc_time_elapsed, 0) << " seconds" << std::endl;
 
@@ -375,9 +376,10 @@ protected:
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Hole creation took                        : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
-        WriteModelPart(r_hole_model_part);
+        // WriteModelPart(r_hole_model_part);
+        // WriteModelPart(r_background_boundary_model_part);
         // WriteModelPart(r_background_model_part);
-        // WriteModelPart(r_modified_patch_boundary_model_part);
+        // WriteModelPart(r_patch_boundary_model_part);
         // WriteModelPart(r_hole_boundary_model_part);
         // WriteModelPart(r_background_model_part);
 
@@ -390,14 +392,14 @@ protected:
         }
 
         BuiltinTimer mpc_time;
+        ApplyContinuityWithMpcs(r_patch_boundary_model_part, *p_point_locator_on_background);
         ApplyContinuityWithMpcs(r_hole_boundary_model_part, *p_pointer_locator_on_patch);
-        ApplyContinuityWithMpcs(r_modified_patch_boundary_model_part, *p_point_locator_on_background);
         auto mpc_time_elapsed = mpc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Creation of MPC for chimera took          : ", mEchoLevel > 0) << r_comm.Max(mpc_time_elapsed, 0) << " seconds" << std::endl;
 
-        current_model.DeleteModelPart("HoleModelpart");
-        current_model.DeleteModelPart("HoleBoundaryModelPart");
-        current_model.DeleteModelPart("ModifiedPatchBoundary");
+        r_hole_boundary_model_part.RemoveSubModelPart(mBoundaryName);
+        r_background_model_part.RemoveSubModelPart(mHoleName);
+        r_patch_model_part.RemoveSubModelPart(mModifiedName);
 
         KRATOS_INFO("End of Formulate Chimera") << std::endl;
     }
@@ -719,7 +721,7 @@ protected:
     {
         const DataCommunicator &r_comm = rModelpart.GetCommunicator().GetDataCommunicator();
         const int mpi_size = r_comm.Size();
-        const int mpi_rank = r_comm.Rank();
+        // const int mpi_rank = r_comm.Rank();
         std::vector<NodesContainerType> RecvNodes(mpi_size);
         BuiltinTimer send_recv_nodes;
         rModelpart.GetCommunicator().TransferObjects(rSendNodes, RecvNodes);
@@ -731,20 +733,8 @@ protected:
         {
             for (NodesContainerType::iterator it = RecvNodes[i].begin();
                  it != RecvNodes[i].end(); ++it){
-                // if (rModelpart.Nodes().find(it->Id()) ==
-                //     rModelpart.Nodes().end()){
                         auto p_node = *it.base();
-                        const int p_node_p_index = p_node->GetSolutionStepValue(PARTITION_INDEX);
-                        // auto p_new_node = mrMainModelPart.CreateNewNode(p_node->Id(), *p_node);
-                        // p_new_node->AddDof(VELOCITY_X, REACTION_X);
-                        // p_new_node->AddDof(VELOCITY_Y, REACTION_Y);
-                        // p_new_node->AddDof(VELOCITY_Z, REACTION_Z);
-                        // p_new_node->AddDof(PRESSURE, REACTION_WATER_PRESSURE);
-                        // p_new_node->GetSolutionStepValue(PARTITION_INDEX) = p_node_p_index;
                         rModelpart.Nodes().push_back(p_node);
-                        // if(p_node_p_index != mpi_rank)
-                        //     mRemoteNodes.push_back(p_node->Id());
-                    //}
                  }
         }
         double time_add_nodes = add_nodes.ElapsedSeconds();
@@ -813,8 +803,8 @@ private:
         if (!current_model.HasModelPart(patch_boundary_mp_name))
         {
             ModelPart &r_patch_model_part = current_model.GetModelPart(PatchParameters["model_part_name"].GetString());
-            ModelPart &r_modified_patch_model_part = current_model.CreateModelPart("ModifiedPatch");
-            ModelPart &r_modified_patch_boundary_model_part = current_model.CreateModelPart("ModifiedPatchBoundary");
+            ModelPart &r_modified_patch_model_part = r_patch_model_part.CreateSubModelPart(mModifiedName);
+            ModelPart &r_modified_patch_boundary_model_part = r_modified_patch_model_part.CreateSubModelPart(mBoundaryName+r_modified_patch_model_part.Name());
             BuiltinTimer distance_calc_time_patch;
             DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::CalculateDistance(r_patch_model_part,
                                                                                                    rBackgroundBoundaryModelpart);
@@ -834,8 +824,7 @@ private:
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took         : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
 
-            current_model.DeleteModelPart("ModifiedPatch");
-            return r_modified_patch_boundary_model_part;
+            return r_modified_patch_boundary_model_part; 
         }
         else
         {
@@ -957,7 +946,8 @@ private:
                     "element_flags"                      : [],
                     "nodal_flags"                        : [],
                     "element_data_value_variables"       : [],
-                    "condition_data_value_variables"     : []
+                    "condition_data_value_variables"     : [],
+                    "write_ids"                          :true
                 }
                 )");
 
