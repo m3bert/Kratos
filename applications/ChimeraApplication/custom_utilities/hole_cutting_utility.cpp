@@ -418,11 +418,11 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
 {
 
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
-    const bool &is_distributed = r_comm.IsDistributed();
+    //const bool &is_distributed = r_comm.IsDistributed();
     const int my_rank = r_comm.MyPID();
     const auto &r_interface_mesh = r_comm.InterfaceMesh();
-    const auto &r_local_mesh = r_comm.LocalMesh();
-    const auto &r_ghost_mesh = r_comm.GhostMesh();
+    // const auto &r_local_mesh = r_comm.LocalMesh();
+    // const auto &r_ghost_mesh = r_comm.GhostMesh();
     std::vector<int> cond_ids_to_remove;
     cond_ids_to_remove.reserve(100);
 
