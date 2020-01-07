@@ -370,13 +370,12 @@ protected:
                                                                                                r_patch_boundary_model_part);
         auto bg_distance_calc_time_elapsed = bg_distance_calc_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Distance calculation on background took   : ", mEchoLevel > 0) << r_comm.Max(bg_distance_calc_time_elapsed, 0) << " seconds" << std::endl;
-
         BuiltinTimer hole_creation_time;
         ChimeraHoleCuttingUtility().CreateHoleAfterDistance<TDim>(r_background_model_part, r_hole_model_part, r_hole_boundary_model_part, over_lap_distance);
         auto hole_creation_time_elapsed = hole_creation_time.ElapsedSeconds();
         KRATOS_INFO_IF("ApplyChimera : Hole creation took                        : ", mEchoLevel > 0) << r_comm.Max(hole_creation_time_elapsed, 0) << " seconds" << std::endl;
 
-        // WriteModelPart(r_hole_model_part);
+        // WriteModelPart(r_hole_model_part); 
         // WriteModelPart(r_background_boundary_model_part);
         // WriteModelPart(r_background_model_part);
         // WriteModelPart(r_patch_boundary_model_part);
@@ -592,7 +591,6 @@ protected:
         if(is_comm_distributed)
             DistanceCalculationUtility<TDim, TSparseSpaceType, TLocalSpaceType>::GatherModelPartOnAllRanks(rBoundaryModelPart, gathered_modelpart);
 
-        WriteModelPart(gathered_modelpart);
         std::vector<int> vector_of_non_found_nodes;
         const int n_boundary_nodes = static_cast<int>(gathered_modelpart.Nodes().size());
         std::vector<int> constraints_id_vector;

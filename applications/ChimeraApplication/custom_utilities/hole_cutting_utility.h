@@ -145,6 +145,9 @@ public:
                               ModelPart &rExtractedBoundaryModelPart,
                               const ChimeraHoleCuttingUtility::SideToExtract GetInternal = ChimeraHoleCuttingUtility::SideToExtract::OUTSIDE);
 
+
+
+    void CheckInterfaceConditionsInMPI(ModelPart& rVolumeModelPart, ModelPart& rExtractedBoundaryModelPart);
     /// Assignment operator.
     ChimeraHoleCuttingUtility &operator=(ChimeraHoleCuttingUtility const &rOther) = delete;
 
