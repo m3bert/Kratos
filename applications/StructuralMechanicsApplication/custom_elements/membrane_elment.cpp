@@ -18,6 +18,7 @@
 
 // Project includes
 #include "includes/checks.h"
+#include "utilities/math_utils.h"
 #include "custom_elements/membrane_element.hpp"
 #include "structural_mechanics_application_variables.h"
 #include "custom_utilities/structural_mechanics_element_utilities.h"
@@ -63,12 +64,6 @@ Element::Pointer MembraneElement::Create(
     return Kratos::make_intrusive< MembraneElement >(NewId, pGeom, pProperties);
 }
 
-//***********************************************************************************
-//***********************************************************************************
-// Destructor
-MembraneElement::~MembraneElement()
-{
-}
 
 //***********************************************************************************
 //***********************************************************************************
@@ -80,18 +75,18 @@ void MembraneElement::EquationIdVector(
 {
   KRATOS_TRY;
 
-  unsigned int num_nodes, local_size;
-  unsigned int local_index = 0;
+  SizeType num_nodes, local_size;
+  SizeType local_index = 0;
 
   num_nodes = GetGeometry().size();
   local_size = num_nodes * 3;
 
-  const unsigned int d_pos = this->GetGeometry()[0].GetDofPosition(DISPLACEMENT_X);
+  const SizeType d_pos = this->GetGeometry()[0].GetDofPosition(DISPLACEMENT_X);
 
   if (rResult.size() != local_size)
       rResult.resize(local_size, false);
 
-  for (unsigned int i_node = 0; i_node < num_nodes; ++i_node)
+  for (SizeType i_node = 0; i_node < num_nodes; ++i_node)
   {
       rResult[local_index++] = this->GetGeometry()[i_node].GetDof(DISPLACEMENT_X, d_pos).EquationId();
       rResult[local_index++] = this->GetGeometry()[i_node].GetDof(DISPLACEMENT_Y, d_pos + 1).EquationId();
@@ -109,16 +104,16 @@ void MembraneElement::GetDofList(
     ProcessInfo& rCurrentProcessInfo)
 
 {
-    unsigned int num_nodes, local_size;
+    SizeType num_nodes, local_size;
     num_nodes = GetGeometry().size();
     local_size = num_nodes * 3;
 
     if (rElementalDofList.size() != local_size)
         rElementalDofList.resize(local_size);
 
-    unsigned int local_index = 0;
+    SizeType local_index = 0;
 
-    for (unsigned int i_node = 0; i_node < num_nodes; ++i_node)
+    for (SizeType i_node = 0; i_node < num_nodes; ++i_node)
     {
         rElementalDofList[local_index++] = this->GetGeometry()[i_node].pGetDof(DISPLACEMENT_X);
         rElementalDofList[local_index++] = this->GetGeometry()[i_node].pGetDof(DISPLACEMENT_Y);
@@ -132,11 +127,24 @@ void MembraneElement::GetDofList(
 void MembraneElement::Initialize()
 {
     KRATOS_TRY;
-    if (GetProperties()[CONSTITUTIVE_LAW] != nullptr) {
-        mpConstitutiveLaw = GetProperties()[CONSTITUTIVE_LAW]->Clone();
-    } else {
-        KRATOS_ERROR << "A constitutive law needs to be specified for the element with ID " << Id() << std::endl;
-    }
+
+    const GeometryType::IntegrationPointsArrayType& integration_points = GetGeometry().IntegrationPoints(GetIntegrationMethod());
+
+    //Constitutive Law initialisation
+    if ( mConstitutiveLawVector.size() != integration_points.size() )
+        mConstitutiveLawVector.resize( integration_points.size() );
+
+    if ( GetProperties()[CONSTITUTIVE_LAW] != nullptr ) {
+        const GeometryType& r_geometry = GetGeometry();
+        const Properties& r_properties = GetProperties();
+        const auto& N_values = r_geometry.ShapeFunctionsValues(GetIntegrationMethod());
+        for ( IndexType point_number = 0; point_number < mConstitutiveLawVector.size(); ++point_number ) {
+            mConstitutiveLawVector[point_number] = GetProperties()[CONSTITUTIVE_LAW]->Clone();
+            mConstitutiveLawVector[point_number]->InitializeMaterial( r_properties, r_geometry, row(N_values , point_number ));
+        }
+    } else
+        KRATOS_ERROR << "A constitutive law needs to be specified for the element with ID " << this->Id() << std::endl;
+
     KRATOS_CATCH( "" )
 }
 
@@ -159,14 +167,15 @@ void MembraneElement::CalculateRightHandSide(
     ProcessInfo& rCurrentProcessInfo)
 
 {
-    const unsigned int number_of_nodes = GetGeometry().size();
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
-    const unsigned int system_size = number_of_nodes * dimension;
+    const SizeType number_of_nodes = GetGeometry().size();
+    const SizeType dimension = GetGeometry().WorkingSpaceDimension();
+    const SizeType system_size = number_of_nodes * dimension;
 
     Vector internal_forces = ZeroVector(system_size);
     InternalForces(internal_forces,GetGeometry().GetDefaultIntegrationMethod());
-    rRightHandSideVector = ZeroVector(system_size);
-    rRightHandSideVector -= internal_forces;
+    rRightHandSideVector.resize(system_size);
+    noalias(rRightHandSideVector) = ZeroVector(system_size);
+    noalias(rRightHandSideVector) -= internal_forces;
     CalculateAndAddBodyForce(rRightHandSideVector);
 }
 
@@ -192,17 +201,17 @@ void MembraneElement::GetValuesVector(
     int Step)
 
 {
-    const unsigned int number_of_nodes = GetGeometry().size();
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
-    const unsigned int mat_size = number_of_nodes * dimension;
+    const SizeType number_of_nodes = GetGeometry().size();
+    const SizeType dimension = GetGeometry().WorkingSpaceDimension();
+    const SizeType mat_size = number_of_nodes * dimension;
 
     if (rValues.size() != mat_size)
         rValues.resize(mat_size, false);
 
-    for (unsigned int i = 0; i < number_of_nodes; i++)
+    for (SizeType i = 0; i < number_of_nodes; i++)
     {
         const array_1d<double, 3>& disp = GetGeometry()[i].FastGetSolutionStepValue(DISPLACEMENT, Step);
-        const unsigned int index = i * 3;
+        const SizeType index = i * 3;
         rValues[index] = disp[0];
         rValues[index + 1] = disp[1];
         rValues[index + 2] = disp[2];
@@ -217,16 +226,16 @@ void MembraneElement::GetFirstDerivativesVector(
     int Step)
 
 {
-    const unsigned int number_of_nodes = GetGeometry().size();
-    const unsigned int mat_size = number_of_nodes * 3;
+    const SizeType number_of_nodes = GetGeometry().size();
+    const SizeType mat_size = number_of_nodes * 3;
 
     if (rValues.size() != mat_size)
         rValues.resize(mat_size, false);
 
-    for (unsigned int i = 0; i < number_of_nodes; i++)
+    for (SizeType i = 0; i < number_of_nodes; i++)
     {
         const array_1d<double, 3>& vel = GetGeometry()[i].FastGetSolutionStepValue(VELOCITY, Step);
-        const unsigned int index = i * 3;
+        const SizeType index = i * 3;
         rValues[index] = vel[0];
         rValues[index + 1] = vel[1];
         rValues[index + 2] = vel[2];
@@ -242,31 +251,19 @@ void MembraneElement::GetSecondDerivativesVector(
     int Step)
 
 {
-    const unsigned int number_of_nodes = GetGeometry().size();
-    const unsigned int mat_size = number_of_nodes * 3;
+    const SizeType number_of_nodes = GetGeometry().size();
+    const SizeType mat_size = number_of_nodes * 3;
 
     if (rValues.size() != mat_size)
         rValues.resize(mat_size, false);
 
-    for (unsigned int i = 0; i < number_of_nodes; i++)
+    for (SizeType i = 0; i < number_of_nodes; i++)
     {
         const array_1d<double, 3>& acc = GetGeometry()[i].FastGetSolutionStepValue(ACCELERATION, Step);
-        const unsigned int index = i * 3;
+        const SizeType index = i * 3;
         rValues[index] = acc[0];
         rValues[index + 1] = acc[1];
         rValues[index + 2] = acc[2];
-    }
-}
-
-void MembraneElement::VoigtNotation(const Matrix& rMetric, Vector& rOutputVector, const std::string StrainStressCheck)
-{
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
-    rOutputVector = ZeroVector(dimension);
-    rOutputVector[0] = rMetric(0,0);
-    rOutputVector[1] = rMetric(1,1);
-    rOutputVector[2] = rMetric(0,1);
-    if (StrainStressCheck=="strain"){
-        rOutputVector[2]*=2.0;
     }
 }
 
@@ -298,7 +295,7 @@ void MembraneElement::TransformStrains(Vector& rStrains,
     // tranform strains needs contra-variant !
     rStrains = ZeroVector(3);
     rReferenceStrains[2]/=2.0; // extract E12 from voigt strain vector
-    rStrains = prod(rTransformationMatrix,rReferenceStrains);
+    noalias(rStrains) = prod(rTransformationMatrix,rReferenceStrains);
     rStrains[2]*=2.0; // include E12 and E21 for voigt strain vector
 }
 
@@ -335,12 +332,13 @@ void MembraneElement::AddPreStressPk2(Vector& rStress, const array_1d<Vector,2>&
             pre_stress = prod(transformation_matrix,pre_stress);
         }
     }
-    rStress += pre_stress;
+    noalias(rStress) += pre_stress;
 }
 
 void MembraneElement::StressPk2(Vector& rStress,
     const Matrix& rReferenceContraVariantMetric,const Matrix& rReferenceCoVariantMetric,const Matrix& rCurrentCoVariantMetric,
-    const array_1d<Vector,2>& rTransformedBaseVectors,const Matrix& rTransformationMatrix, array_1d<bool,3>& rWrinklingStateArray)
+    const array_1d<Vector,2>& rTransformedBaseVectors,const Matrix& rTransformationMatrix,const SizeType& rIntegrationPointNumber,
+    Matrix& rConsitutiveMatrix)
 {
     Vector strain_vector = ZeroVector(3);
     rStress = ZeroVector(3);
@@ -349,7 +347,6 @@ void MembraneElement::StressPk2(Vector& rStress,
 
     ProcessInfo temp_process_information;
     ConstitutiveLaw::Parameters element_parameters(GetGeometry(),GetProperties(),temp_process_information);
-
     Matrix material_tangent_modulus = ZeroMatrix(3);
     element_parameters.SetStrainVector(strain_vector);
     element_parameters.SetStressVector(rStress);
@@ -357,64 +354,86 @@ void MembraneElement::StressPk2(Vector& rStress,
     element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
     element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
     element_parameters.Set(ConstitutiveLaw::COMPUTE_CONSTITUTIVE_TENSOR);
-    mpConstitutiveLaw->CalculateMaterialResponse(element_parameters,ConstitutiveLaw::StressMeasure_PK2);
+    mConstitutiveLawVector[rIntegrationPointNumber]->CalculateMaterialResponse(element_parameters,ConstitutiveLaw::StressMeasure_PK2);
 
     AddPreStressPk2(rStress,rTransformedBaseVectors);
 
+    rConsitutiveMatrix = material_tangent_modulus;
 
 
+
+
+
+    //temp dev check with IS_FORMFINDING variable ....
+    bool consider_wrinkling = false;
+    if (GetProperties().Has( IS_FORMFINDING ) ){
+        consider_wrinkling = GetProperties()[IS_FORMFINDING];
+    }
     //// check wrinkling
     // rWrinklingStateArray (taut,wrinkled,slack)
     Vector wrinkling_direction = ZeroVector(3);
-    CheckWrinklingState(rWrinklingStateArray,rStress,strain_vector,wrinkling_direction);
+    WrinklingType current_wrinkling_sate;
+    CheckWrinklingState(current_wrinkling_sate,rStress,strain_vector,wrinkling_direction);
+
+    if (consider_wrinkling) {
+        //todo: consider cauchy stress for wrinkling direction
+        //todo: consider C_II for proper convergence of NR
+        //hint: this is for linear elastic materials right now
+
+        // slack
+        if (current_wrinkling_sate==WrinklingType::Slack){
+            rStress = ZeroVector(3);
+            // this should be used but not in the first step !
+            //rConsitutiveMatrix = ZeroMatrix(3);
+        }
+        // wrinkling
+        else if (current_wrinkling_sate==WrinklingType::Wrinkle){
+
+            // this should be done better
+            Matrix wrinkling_operation_vector = ZeroMatrix(3,1);
+            wrinkling_operation_vector(0,0) = wrinkling_direction[0];
+            wrinkling_operation_vector(1,0) = wrinkling_direction[1];
+            wrinkling_operation_vector(2,0) = wrinkling_direction[2];
+            //
+
+            rStress = ZeroVector(3);
+            ConstitutiveLaw::Parameters wrinkled_element_parameters(GetGeometry(),GetProperties(),temp_process_information);
+            wrinkled_element_parameters.SetStrainVector(strain_vector);
+            wrinkled_element_parameters.SetStressVector(rStress);
+            wrinkled_element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
+            wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
+            wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_CONSTITUTIVE_TENSOR);
+
+            // change C
+            // set C
+            Matrix material_tangent_modulus_modified = ZeroMatrix(3);
+            material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector);
+            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector));
+            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
+
+            Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector);
+            scale_mat_vec = prod(trans(wrinkling_operation_vector),scale_mat_vec);
+
+            material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
+            material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified;
 
 
-    // slack
-    if (rWrinklingStateArray[2]){
-        rStress = ZeroVector(3);
+            wrinkled_element_parameters.SetConstitutiveMatrix(material_tangent_modulus_modified);
+            mConstitutiveLawVector[rIntegrationPointNumber]->CalculateMaterialResponse(wrinkled_element_parameters,ConstitutiveLaw::StressMeasure_PK2);
+
+            AddPreStressPk2(rStress,rTransformedBaseVectors);
+            rConsitutiveMatrix = material_tangent_modulus_modified;
+
+            KRATOS_WATCH(rStress);
+            std::cout << "''''''''''''''''''''''''" << std::endl;
+        }
+        // else: taut, do nothing special
     }
-    // wrinkling
-    else if (rWrinklingStateArray[1]){
-
-        Matrix wrinkling_operation_vector = ZeroMatrix(3,1);
-        wrinkling_operation_vector(0,0) = wrinkling_direction[0]*wrinkling_direction[0];
-        wrinkling_operation_vector(1,0) = wrinkling_direction[1]*wrinkling_direction[1];
-        wrinkling_operation_vector(2,0) = 2.0*wrinkling_direction[0]*wrinkling_direction[1];
-
-        rStress = ZeroVector(3);
-        ConstitutiveLaw::Parameters wrinkled_element_parameters(GetGeometry(),GetProperties(),temp_process_information);
-        wrinkled_element_parameters.SetStrainVector(strain_vector);
-        wrinkled_element_parameters.SetStressVector(rStress);
-        wrinkled_element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
-        wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
-        wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_CONSTITUTIVE_TENSOR);
-
-        // change C
-        // set C
-        Matrix material_tangent_modulus_modified = ZeroMatrix(3);
-        material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector);
-        material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector));
-        material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
-
-        Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector);
-        scale_mat_vec = prod(trans(wrinkling_operation_vector),scale_mat_vec);
-
-        material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
-        material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified;
-
-
-        wrinkled_element_parameters.SetConstitutiveMatrix(material_tangent_modulus_modified);
-        mpConstitutiveLaw->CalculateMaterialResponse(wrinkled_element_parameters,ConstitutiveLaw::StressMeasure_PK2);
-
-        AddPreStressPk2(rStress,rTransformedBaseVectors);
-    }
-
-    // else: taut, do nothing special
-
 }
 
 void MembraneElement::MaterialTangentModulus(Matrix& rTangentModulus,const Matrix& rReferenceContraVariantMetric,
-    const Matrix& rReferenceCoVariantMetric,const Matrix& rCurrentCoVariantMetric, const Matrix& rTransformationMatrix)
+    const Matrix& rReferenceCoVariantMetric,const Matrix& rCurrentCoVariantMetric, const Matrix& rTransformationMatrix,
+    const SizeType& rIntegrationPointNumber)
 {
     rTangentModulus = ZeroMatrix(3);
     Vector strain_vector = ZeroVector(3);
@@ -427,7 +446,7 @@ void MembraneElement::MaterialTangentModulus(Matrix& rTangentModulus,const Matri
     element_parameters.SetConstitutiveMatrix(rTangentModulus);
     element_parameters.Set(ConstitutiveLaw::COMPUTE_CONSTITUTIVE_TENSOR);
     element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
-    mpConstitutiveLaw->CalculateMaterialResponse(element_parameters,ConstitutiveLaw::StressMeasure_PK2);
+    mConstitutiveLawVector[rIntegrationPointNumber]->CalculateMaterialResponse(element_parameters,ConstitutiveLaw::StressMeasure_PK2);
 
 }
 
@@ -435,8 +454,7 @@ void MembraneElement::StrainGreenLagrange(Vector& rStrain, const Matrix& rRefere
     const Matrix& rTransformationMatrix)
 {
     Matrix strain_matrix = 0.50 * (rCurrentCoVariantMetric-rReferenceCoVariantMetric);
-    Vector reference_strain = ZeroVector(3);
-    VoigtNotation(strain_matrix,reference_strain,"strain");
+    Vector reference_strain = MathUtils<double>::StrainTensorToVector(strain_matrix,3);
     TransformStrains(rStrain,reference_strain,rTransformationMatrix);
 }
 
@@ -446,9 +464,7 @@ void MembraneElement::DerivativeStrainGreenLagrange(Vector& rStrain, const Matri
     Matrix current_covariant_metric_derivative = ZeroMatrix(2);
     DerivativeCurrentCovariantMetric(current_covariant_metric_derivative,rShapeFunctionGradientValues,DofR,rCurrentCovariantBaseVectors);
     Matrix strain_matrix_derivative = 0.50 * current_covariant_metric_derivative;
-
-    Vector reference_strain = ZeroVector(3);
-    VoigtNotation(strain_matrix_derivative,reference_strain,"strain");
+    Vector reference_strain = MathUtils<double>::StrainTensorToVector(strain_matrix_derivative,3);
     TransformStrains(rStrain,reference_strain,rTransformationMatrix);
 }
 
@@ -461,8 +477,7 @@ void MembraneElement::Derivative2StrainGreenLagrange(Vector& rStrain,
 
     Matrix strain_matrix_derivative = 0.50 * current_covariant_metric_derivative;
 
-    Vector reference_strain = ZeroVector(3);
-    VoigtNotation(strain_matrix_derivative,reference_strain,"strain");
+    Vector reference_strain = MathUtils<double>::StrainTensorToVector(strain_matrix_derivative,3);
     TransformStrains(rStrain,reference_strain,rTransformationMatrix);
 }
 
@@ -471,6 +486,7 @@ void MembraneElement::JacobiDeterminante(double& rDetJacobi, const array_1d<Vect
     Vector3 g3 = ZeroVector(3);
     MathUtils<double>::CrossProduct(g3, rReferenceBaseVectors[0], rReferenceBaseVectors[1]);
     rDetJacobi = MathUtils<double>::Norm(g3);
+    KRATOS_ERROR_IF(rDetJacobi<std::numeric_limits<double>::epsilon()) << "det of Jacobi smaller 0 for element with id" << Id() << std::endl;
 }
 
 void MembraneElement::DerivativeCurrentCovariantMetric(Matrix& rMetric,
@@ -509,8 +525,8 @@ void MembraneElement::Derivative2CurrentCovariantMetric(Matrix& rMetric,
 void MembraneElement::DeriveCurrentCovariantBaseVectors(array_1d<Vector,2>& rBaseVectors,
      const Matrix& rShapeFunctionGradientValues, const SizeType DofR)
 {
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
-    const unsigned int number_of_nodes = GetGeometry().size();
+    const SizeType dimension = GetGeometry().WorkingSpaceDimension();
+    const SizeType number_of_nodes = GetGeometry().size();
     Vector dg1 = ZeroVector(dimension);
     Vector dg2 = ZeroVector(dimension);
     Vector dudur = ZeroVector(dimension*number_of_nodes);
@@ -530,18 +546,17 @@ void MembraneElement::DeriveCurrentCovariantBaseVectors(array_1d<Vector,2>& rBas
 }
 
 void MembraneElement::CovariantBaseVectors(array_1d<Vector,2>& rBaseVectors,
-     const Matrix& rShapeFunctionGradientValues, const std::string Configuration)
+     const Matrix& rShapeFunctionGradientValues, const ConfigurationType& rConfiguration)
 {
     // pass/call this ShapeFunctionsLocalGradients[pnt]
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
-    const unsigned int number_of_nodes = GetGeometry().size();
+    const SizeType dimension = GetGeometry().WorkingSpaceDimension();
+    const SizeType number_of_nodes = GetGeometry().size();
     Vector g1 = ZeroVector(dimension);
     Vector g2 = ZeroVector(dimension);
 
     Vector current_displacement = ZeroVector(dimension*number_of_nodes);
-    if (Configuration=="current") GetValuesVector(current_displacement);
-    else if (Configuration=="reference");
-    else KRATOS_ERROR << "configuration " << Configuration << " not known" << std::endl;
+    if (rConfiguration==ConfigurationType::Current) GetValuesVector(current_displacement);
+
 
     for (SizeType i=0;i<number_of_nodes;++i){
         g1[0] += (GetGeometry().GetPoint( i ).X0()+current_displacement[i*dimension]) * rShapeFunctionGradientValues(i, 0);
@@ -573,13 +588,13 @@ void MembraneElement::ContravariantMetric(Matrix& rMetric,const Matrix& rCovaria
     rMetric(1,1) = rCovariantMetric(0,0);
     rMetric(0,1) = -1.0*rCovariantMetric(1,0);
     rMetric(1,0) = -1.0*rCovariantMetric(0,1);
-    rMetric/=(rCovariantMetric(1,1)*rCovariantMetric(0,0)) - (rCovariantMetric(1,0)*rCovariantMetric(0,1));
+    rMetric /= (rCovariantMetric(1,1)*rCovariantMetric(0,0)) - (rCovariantMetric(1,0)*rCovariantMetric(0,1));
 }
 
 void MembraneElement::ContraVariantBaseVectors(array_1d<Vector,2>& rBaseVectors,const Matrix& rContraVariantMetric,
     const array_1d<Vector,2> rCovariantBaseVectors)
 {
-    const unsigned int dimension = GetGeometry().WorkingSpaceDimension();
+    const SizeType dimension = GetGeometry().WorkingSpaceDimension();
     rBaseVectors[0] = ZeroVector(dimension);
     rBaseVectors[1] = ZeroVector(dimension);
 
@@ -604,8 +619,6 @@ void MembraneElement::InternalForces(Vector& rInternalForces,const IntegrationMe
     array_1d<Vector,2> reference_covariant_base_vectors;
     array_1d<Vector,2> reference_contravariant_base_vectors;
 
-    array_1d<bool,3> wrinkling_state_array;
-
     array_1d<Vector,2> transformed_base_vectors;
 
     Matrix covariant_metric_current = ZeroMatrix(3);
@@ -615,14 +628,15 @@ void MembraneElement::InternalForces(Vector& rInternalForces,const IntegrationMe
     double detJ = 0.0;
     Vector stress = ZeroVector(3);
     Vector derivative_strain = ZeroVector(3);
+    Matrix constitutive_matrix = ZeroMatrix(3);
 
     for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
         // getting information for integration
         const double integration_weight_i = r_integration_points[point_number].Weight();
         const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
 
-        CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,"current");
-        CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,"reference");
+        CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Current);
+        CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Reference);
 
         CovariantMetric(covariant_metric_current,current_covariant_base_vectors);
         CovariantMetric(covariant_metric_reference,reference_covariant_base_vectors);
@@ -638,7 +652,7 @@ void MembraneElement::InternalForces(Vector& rInternalForces,const IntegrationMe
         JacobiDeterminante(detJ,reference_covariant_base_vectors);
         StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,
             covariant_metric_current,transformed_base_vectors,inplane_transformation_matrix_material,
-            wrinkling_state_array);
+            point_number,constitutive_matrix);
 
         for (SizeType dof_r=0;dof_r<number_dofs;++dof_r)
         {
@@ -701,23 +715,21 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
     array_1d<Vector,2> reference_contravariant_base_vectors;
     array_1d<Vector,2> transformed_base_vectors;
 
-    array_1d<bool,3> wrinkling_state_array;
-
     Matrix covariant_metric_current = ZeroMatrix(3);
     Matrix covariant_metric_reference = ZeroMatrix(3);
     Matrix contravariant_metric_reference = ZeroMatrix(3);
     Matrix inplane_transformation_matrix_material = ZeroMatrix(3);
     double detJ = 0.0;
+    double temp_stiffness_entry;
     Vector stress = ZeroVector(3);
-    Vector derivative_strain = ZeroVector(3);
 
     for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
         // getting information for integration
         const double integration_weight_i = r_integration_points[point_number].Weight();
         const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
 
-        CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,"current");
-        CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,"reference");
+        CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Current);
+        CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Reference);
 
         CovariantMetric(covariant_metric_current,current_covariant_base_vectors);
         CovariantMetric(covariant_metric_reference,reference_covariant_base_vectors);
@@ -730,12 +742,14 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
         InPlaneTransformationMatrix(inplane_transformation_matrix_material,transformed_base_vectors,reference_contravariant_base_vectors);
 
         JacobiDeterminante(detJ,reference_covariant_base_vectors);
-        StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
-            transformed_base_vectors,inplane_transformation_matrix_material,wrinkling_state_array);
+
 
         Matrix material_tangent_modulus = ZeroMatrix(dimension);
-        MaterialTangentModulus(material_tangent_modulus,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
-            inplane_transformation_matrix_material);
+        StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
+            transformed_base_vectors,inplane_transformation_matrix_material,point_number,material_tangent_modulus);
+
+        /* MaterialTangentModulus(material_tangent_modulus,contravariant_metric_reference,covariant_metric_reference,covariant_metric_current,
+            inplane_transformation_matrix_material,point_number); */
 
         for (SizeType dof_s=0;dof_s<number_dofs;++dof_s){
             for (SizeType dof_r=0;dof_r<number_dofs;++dof_r){
@@ -745,13 +759,14 @@ void MembraneElement::TotalStiffnessMatrix(Matrix& rStiffnessMatrix,const Integr
                     if (point_number==(r_integration_points.size()-1)) rStiffnessMatrix(dof_s,dof_r) = rStiffnessMatrix(dof_r,dof_s);
                 }
                 else{
-                    MaterialStiffnessMatrixEntryIJ(rStiffnessMatrix(dof_s,dof_r),
+                    temp_stiffness_entry = 0.0;
+                    MaterialStiffnessMatrixEntryIJ(temp_stiffness_entry,
                         material_tangent_modulus,dof_s,dof_r,shape_functions_gradients_i,
                         current_covariant_base_vectors,inplane_transformation_matrix_material);
-                    InitialStressStiffnessMatrixEntryIJ(rStiffnessMatrix(dof_s,dof_r),
+                    InitialStressStiffnessMatrixEntryIJ(temp_stiffness_entry,
                         stress,dof_s,dof_r,shape_functions_gradients_i,
                         inplane_transformation_matrix_material);
-                    rStiffnessMatrix(dof_s,dof_r) *= detJ*integration_weight_i*thickness;
+                    rStiffnessMatrix(dof_s,dof_r) += temp_stiffness_entry*detJ*integration_weight_i*thickness;
                 }
             }
         }
@@ -782,6 +797,137 @@ void MembraneElement::TransformBaseVectors(array_1d<Vector,2>& rBaseVectors,
     }
 }
 
+void MembraneElement::CalculateOnIntegrationPoints(const Variable<Vector >& rVariable,
+                        std::vector< Vector >& rOutput,
+                        const ProcessInfo& rCurrentProcessInfo)
+{
+    // element with two nodes can only represent results at one node
+    const IntegrationMethod integration_method = GetGeometry().GetDefaultIntegrationMethod();
+    const SizeType& write_points_number =
+        GetGeometry().IntegrationPointsNumber(integration_method);
+    if (rOutput.size() != write_points_number) {
+        rOutput.resize(write_points_number);
+    }
+
+    const GeometryType::ShapeFunctionsGradientsType& r_shape_functions_gradients = GetGeometry().ShapeFunctionsLocalGradients(integration_method);
+    const GeometryType::IntegrationPointsArrayType& r_integration_points = GetGeometry().IntegrationPoints(integration_method);
+
+    if (rVariable==PK2_STRESS_VECTOR || rVariable==PRINCIPAL_PK2_STRESS_VECTOR){
+        Vector stress = ZeroVector(3);
+        array_1d<Vector,2> current_covariant_base_vectors;
+        array_1d<Vector,2> reference_covariant_base_vectors;
+        array_1d<Vector,2> reference_contravariant_base_vectors;
+
+        array_1d<Vector,2> transformed_base_vectors;
+
+        Matrix covariant_metric_current = ZeroMatrix(3);
+        Matrix covariant_metric_reference = ZeroMatrix(3);
+        Matrix contravariant_metric_reference = ZeroMatrix(3);
+        Matrix inplane_transformation_matrix_material = ZeroMatrix(3);
+        Matrix constitutive_matrix = ZeroMatrix(3);
+
+        for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
+            // getting information for integration
+            const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
+
+            CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Current);
+            CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Reference);
+
+            CovariantMetric(covariant_metric_current,current_covariant_base_vectors);
+            CovariantMetric(covariant_metric_reference,reference_covariant_base_vectors);
+            ContravariantMetric(contravariant_metric_reference,covariant_metric_reference);
+
+            ContraVariantBaseVectors(reference_contravariant_base_vectors,contravariant_metric_reference,reference_covariant_base_vectors);
+
+            TransformBaseVectors(transformed_base_vectors,reference_contravariant_base_vectors);
+
+            InPlaneTransformationMatrix(inplane_transformation_matrix_material,transformed_base_vectors,reference_contravariant_base_vectors);
+
+            StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,
+                covariant_metric_current,transformed_base_vectors,inplane_transformation_matrix_material,
+                point_number,constitutive_matrix);
+
+            if (rVariable==PRINCIPAL_PK2_STRESS_VECTOR){
+                Vector principal_stresses = ZeroVector(2);
+                PrincipalVector(principal_stresses,stress);
+                rOutput[point_number] = principal_stresses;
+            }  else {
+                rOutput[point_number] = stress;
+            }
+        }
+
+    }  else if (rVariable==CAUCHY_STRESS_VECTOR || rVariable==PRINCIPAL_CAUCHY_STRESS_VECTOR){
+
+        Vector stress = ZeroVector(3);
+        array_1d<Vector,2> current_covariant_base_vectors;
+        array_1d<Vector,2> reference_covariant_base_vectors;
+        array_1d<Vector,2> reference_contravariant_base_vectors;
+
+        array_1d<Vector,2> transformed_base_vectors;
+
+        Matrix covariant_metric_current = ZeroMatrix(3);
+        Matrix covariant_metric_reference = ZeroMatrix(3);
+        Matrix contravariant_metric_reference = ZeroMatrix(3);
+        Matrix inplane_transformation_matrix_material = ZeroMatrix(3);
+
+        Matrix stress_matrix = ZeroMatrix(2);
+        Matrix deformation_gradient = ZeroMatrix(2);
+        double det_deformation_gradient = 0.0;
+        Matrix constitutive_matrix = ZeroMatrix(3);
+
+        for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
+            // getting information for integration
+            const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
+
+            CovariantBaseVectors(current_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Current);
+            CovariantBaseVectors(reference_covariant_base_vectors,shape_functions_gradients_i,ConfigurationType::Reference);
+
+            CovariantMetric(covariant_metric_current,current_covariant_base_vectors);
+            CovariantMetric(covariant_metric_reference,reference_covariant_base_vectors);
+            ContravariantMetric(contravariant_metric_reference,covariant_metric_reference);
+
+            ContraVariantBaseVectors(reference_contravariant_base_vectors,contravariant_metric_reference,reference_covariant_base_vectors);
+
+            TransformBaseVectors(transformed_base_vectors,reference_contravariant_base_vectors);
+
+            InPlaneTransformationMatrix(inplane_transformation_matrix_material,transformed_base_vectors,reference_contravariant_base_vectors);
+
+            StressPk2(stress,contravariant_metric_reference,covariant_metric_reference,
+                covariant_metric_current,transformed_base_vectors,inplane_transformation_matrix_material,
+                point_number,constitutive_matrix);
+
+            DeformationGradient(deformation_gradient,det_deformation_gradient,current_covariant_base_vectors,reference_contravariant_base_vectors);
+
+
+            stress_matrix = MathUtils<double>::StressVectorToTensor(stress);
+            Matrix temp_stress_matrix = prod(deformation_gradient,stress_matrix);
+            Matrix temp_stress_matrix_2 = prod(temp_stress_matrix,trans(deformation_gradient));
+            Matrix cauchy_stress_matrix = temp_stress_matrix_2 / det_deformation_gradient;
+            stress = MathUtils<double>::StressTensorToVector(cauchy_stress_matrix,3);
+
+
+            if (rVariable==PRINCIPAL_CAUCHY_STRESS_VECTOR){
+                Vector principal_stresses = ZeroVector(2);
+                PrincipalVector(principal_stresses,stress);
+                rOutput[point_number] = principal_stresses;
+            }  else {
+                rOutput[point_number] = stress;
+            }
+        }
+    }
+}
+
+
+void MembraneElement::DeformationGradient(Matrix& rDeformationGradient, double& rDetDeformationGradient,
+     const array_1d<Vector,2>& rCurrentCovariantBase, const array_1d<Vector,2>& rReferenceContraVariantBase)
+{
+    rDeformationGradient = ZeroMatrix(2);
+    for (SizeType i=0;i<2;++i){
+        rDeformationGradient += outer_prod(rCurrentCovariantBase[i],rReferenceContraVariantBase[i]);
+    }
+    rDetDeformationGradient = (rDeformationGradient(0,0)*rDeformationGradient(1,1)) - (rDeformationGradient(0,1)*rDeformationGradient(1,0));
+}
+
 void MembraneElement::CalculateOnIntegrationPoints(
     const Variable<array_1d<double, 3>>& rVariable,
     std::vector<array_1d<double, 3>>& rOutput,
@@ -791,7 +937,7 @@ void MembraneElement::CalculateOnIntegrationPoints(
     KRATOS_TRY
     // element with two nodes can only represent results at one node
     const IntegrationMethod integration_method = GetGeometry().GetDefaultIntegrationMethod();
-    const unsigned int& write_points_number =
+    const SizeType& write_points_number =
         GetGeometry().IntegrationPointsNumber(integration_method);
     if (rOutput.size() != write_points_number) {
         rOutput.resize(write_points_number);
@@ -802,26 +948,26 @@ void MembraneElement::CalculateOnIntegrationPoints(
         const GeometryType::ShapeFunctionsGradientsType& r_shape_functions_gradients = GetGeometry().ShapeFunctionsLocalGradients(integration_method);
         const GeometryType::IntegrationPointsArrayType& r_integration_points = GetGeometry().IntegrationPoints(integration_method);
 
-        Vector base_1 = ZeroVector(3);
-        Vector base_2 = ZeroVector(3);
+
         for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
+            Vector base_1 = ZeroVector(3);
+            Vector base_2 = ZeroVector(3);
             const double integration_weight_i = r_integration_points[point_number].Weight();
             const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
-            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,"reference");
+            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,ConfigurationType::Reference);
             base_1 += base_vectors_current_cov[0]*integration_weight_i;
             base_2 += base_vectors_current_cov[1]*integration_weight_i;
-        }
 
+            array_1d<Vector,2> base_vectors_integrated;
+            base_vectors_integrated[0] = base_1;
+            base_vectors_integrated[1] = base_2;
 
-        array_1d<Vector,2> base_vectors_integrated;
-        base_vectors_integrated[0] = base_1;
-        base_vectors_integrated[1] = base_2;
+            array_1d<Vector,2> base_vectors_integrated_transformed;
+            TransformBaseVectors(base_vectors_integrated_transformed,base_vectors_integrated);
 
-        array_1d<Vector,2> base_vectors_integrated_transformed;
-        TransformBaseVectors(base_vectors_integrated_transformed,base_vectors_integrated);
-
-        for (SizeType i =0; i<3; ++i) {
-            rOutput[0][i] = base_vectors_integrated_transformed[0][i]; // write integrated basevector to 1st GP
+            for (SizeType i =0; i<3; ++i) {
+                rOutput[point_number][i] = base_vectors_integrated_transformed[0][i];
+            }
         }
 
     } else if (rVariable == LOCAL_AXIS_2) {
@@ -829,25 +975,26 @@ void MembraneElement::CalculateOnIntegrationPoints(
         const GeometryType::ShapeFunctionsGradientsType& r_shape_functions_gradients = GetGeometry().ShapeFunctionsLocalGradients(integration_method);
         const GeometryType::IntegrationPointsArrayType& r_integration_points = GetGeometry().IntegrationPoints(integration_method);
 
-        Vector base_1 = ZeroVector(3);
-        Vector base_2 = ZeroVector(3);
+
         for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
+            Vector base_1 = ZeroVector(3);
+            Vector base_2 = ZeroVector(3);
             const double integration_weight_i = r_integration_points[point_number].Weight();
             const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
-            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,"reference");
+            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,ConfigurationType::Reference);
             base_1 += base_vectors_current_cov[0]*integration_weight_i;
             base_2 += base_vectors_current_cov[1]*integration_weight_i;
-        }
 
-        array_1d<Vector,2> base_vectors_integrated;
-        base_vectors_integrated[0] = base_1;
-        base_vectors_integrated[1] = base_2;
+            array_1d<Vector,2> base_vectors_integrated;
+            base_vectors_integrated[0] = base_1;
+            base_vectors_integrated[1] = base_2;
 
-        array_1d<Vector,2> base_vectors_integrated_transformed;
-        TransformBaseVectors(base_vectors_integrated_transformed,base_vectors_integrated);
+            array_1d<Vector,2> base_vectors_integrated_transformed;
+            TransformBaseVectors(base_vectors_integrated_transformed,base_vectors_integrated);
 
-        for (SizeType i =0; i<3; ++i) {
-            rOutput[0][i] = base_vectors_integrated_transformed[1][i]; // write integrated basevector to 1st GP
+            for (SizeType i =0; i<3; ++i) {
+                rOutput[point_number][i] = base_vectors_integrated_transformed[1][i];
+            }
         }
 
 
@@ -856,22 +1003,23 @@ void MembraneElement::CalculateOnIntegrationPoints(
         const GeometryType::ShapeFunctionsGradientsType& r_shape_functions_gradients = GetGeometry().ShapeFunctionsLocalGradients(integration_method);
         const GeometryType::IntegrationPointsArrayType& r_integration_points = GetGeometry().IntegrationPoints(integration_method);
 
-        Vector base_1 = ZeroVector(3);
-        Vector base_2 = ZeroVector(3);
-        Vector base_3 = ZeroVector(3);
+
         for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
+            Vector base_1 = ZeroVector(3);
+            Vector base_2 = ZeroVector(3);
+            Vector base_3 = ZeroVector(3);
             const double integration_weight_i = r_integration_points[point_number].Weight();
             const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
-            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,"reference");
+            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,ConfigurationType::Reference);
             base_1 += base_vectors_current_cov[0]*integration_weight_i;
             base_2 += base_vectors_current_cov[1]*integration_weight_i;
-        }
 
-        MathUtils<double>::CrossProduct(base_3, base_1, base_2);
-        base_3 /= MathUtils<double>::Norm(base_3);
+            MathUtils<double>::CrossProduct(base_3, base_1, base_2);
+            base_3 /= MathUtils<double>::Norm(base_3);
 
-        for (SizeType i =0; i<3; ++i) {
-            rOutput[0][i] = base_3[i]; // write integrated basevector to 1st GP
+            for (SizeType i =0; i<3; ++i) {
+                rOutput[point_number][i] = base_3[i];
+            }
         }
     }
 
@@ -896,7 +1044,7 @@ void MembraneElement::Calculate(const Variable<Matrix>& rVariable, Matrix& rOutp
         for (SizeType point_number = 0; point_number < r_integration_points.size(); ++point_number){
             const double integration_weight_i = r_integration_points[point_number].Weight();
             const Matrix& shape_functions_gradients_i = r_shape_functions_gradients[point_number];
-            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,"reference");
+            CovariantBaseVectors(base_vectors_current_cov,shape_functions_gradients_i,ConfigurationType::Reference);
             base_1 += base_vectors_current_cov[0]*integration_weight_i;
             base_2 += base_vectors_current_cov[1]*integration_weight_i;
         }
@@ -904,11 +1052,9 @@ void MembraneElement::Calculate(const Variable<Matrix>& rVariable, Matrix& rOutp
         MathUtils<double>::CrossProduct(base_3, base_1, base_2);
         base_3 /= MathUtils<double>::Norm(base_3);
 
-        for (SizeType i =0; i<3; ++i) {
-            rOutput(i,0) = base_1[i];
-            rOutput(i,1) = base_2[i];
-            rOutput(i,2) = base_3[i];
-        }
+        column(rOutput,0) = base_1;
+        column(rOutput,1) = base_2;
+        column(rOutput,2) = base_3;
     }
 }
 
@@ -922,14 +1068,23 @@ void MembraneElement::GetValueOnIntegrationPoints(
     KRATOS_CATCH("")
 }
 
+void MembraneElement::GetValueOnIntegrationPoints(const Variable<Vector>& rVariable,
+                        std::vector<Vector>& rValues,
+                        const ProcessInfo& rCurrentProcessInfo)
+{
+    KRATOS_TRY;
+    CalculateOnIntegrationPoints(rVariable, rValues, rCurrentProcessInfo);
+    KRATOS_CATCH("")
+}
+
 void MembraneElement::CalculateMassMatrix(MatrixType& rMassMatrix, ProcessInfo& rCurrentProcessInfo)
 {
     KRATOS_TRY
     auto& r_geom = GetGeometry();
 
     // LUMPED MASS MATRIX
-    unsigned int number_of_nodes = r_geom.size();
-    unsigned int mat_size = number_of_nodes * 3;
+    SizeType number_of_nodes = r_geom.size();
+    SizeType mat_size = number_of_nodes * 3;
 
     if (rMassMatrix.size1() != mat_size) {
         rMassMatrix.resize(mat_size, mat_size, false);
@@ -943,12 +1098,12 @@ void MembraneElement::CalculateMassMatrix(MatrixType& rMassMatrix, ProcessInfo& 
     Vector lump_fact =  ZeroVector(number_of_nodes);
     r_geom.LumpingFactors(lump_fact);
 
-    for (unsigned int i = 0; i < number_of_nodes; ++i) {
+    for (SizeType i = 0; i < number_of_nodes; ++i) {
         const double temp = lump_fact[i] * total_mass;
 
-        for (unsigned int j = 0; j < 3; ++j)
+        for (SizeType j = 0; j < 3; ++j)
         {
-            const unsigned int index = i * 3 + j;
+            const SizeType index = i * 3 + j;
             rMassMatrix(index, index) = temp;
         }
     }
@@ -960,9 +1115,9 @@ void MembraneElement::CalculateLumpedMassVector(VectorType& rMassVector)
 {
     KRATOS_TRY
     auto& r_geom = GetGeometry();
-    const unsigned int dimension = r_geom.WorkingSpaceDimension();
-    const unsigned int number_of_nodes = r_geom.size();
-    const unsigned int local_size = dimension*number_of_nodes;
+    const SizeType dimension = r_geom.WorkingSpaceDimension();
+    const SizeType number_of_nodes = r_geom.size();
+    const SizeType local_size = dimension*number_of_nodes;
 
     if (rMassVector.size() != local_size) {
         rMassVector.resize(local_size, false);
@@ -973,12 +1128,12 @@ void MembraneElement::CalculateLumpedMassVector(VectorType& rMassVector)
     Vector lump_fact =  ZeroVector(number_of_nodes);
     r_geom.LumpingFactors(lump_fact);
 
-    for (unsigned int i = 0; i < number_of_nodes; ++i) {
+    for (SizeType i = 0; i < number_of_nodes; ++i) {
         const double temp = lump_fact[i] * total_mass;
 
-        for (unsigned int j = 0; j < 3; ++j)
+        for (SizeType j = 0; j < 3; ++j)
         {
-            const unsigned int index = i * 3 + j;
+            const SizeType index = i * 3 + j;
             rMassVector[index] = temp;
         }
     }
@@ -994,9 +1149,9 @@ void MembraneElement::AddExplicitContribution(
     KRATOS_TRY;
 
     auto& r_geom = GetGeometry();
-    const unsigned int dimension = r_geom.WorkingSpaceDimension();
-    const unsigned int number_of_nodes = r_geom.size();
-    const unsigned int local_size = dimension*number_of_nodes;
+    const SizeType dimension = r_geom.WorkingSpaceDimension();
+    const SizeType number_of_nodes = r_geom.size();
+    const SizeType local_size = dimension*number_of_nodes;
 
     if (rDestinationVariable == NODAL_MASS) {
         VectorType element_mass_vector(local_size);
@@ -1032,9 +1187,9 @@ void MembraneElement::AddExplicitContribution(
     KRATOS_TRY;
 
     auto& r_geom = GetGeometry();
-    const unsigned int dimension = r_geom.WorkingSpaceDimension();
-    const unsigned int number_of_nodes = r_geom.size();
-    const unsigned int local_size = dimension*number_of_nodes;
+    const SizeType dimension = r_geom.WorkingSpaceDimension();
+    const SizeType number_of_nodes = r_geom.size();
+    const SizeType local_size = dimension*number_of_nodes;
 
     if (rRHSVariable == RESIDUAL_VECTOR && rDestinationVariable == FORCE_RESIDUAL) {
 
@@ -1083,77 +1238,90 @@ void MembraneElement::CalculateAndAddBodyForce(VectorType& rRightHandSideVector)
 {
     KRATOS_TRY
     auto& r_geom = GetGeometry();
-    const unsigned int number_of_nodes = r_geom.size();
+    const SizeType number_of_nodes = r_geom.size();
 
     const double total_mass = r_geom.Area() * GetProperties()[THICKNESS] * StructuralMechanicsElementUtilities::GetDensityForMassMatrixComputation(*this);;
 
     Vector lump_fact =  ZeroVector(number_of_nodes);
     r_geom.LumpingFactors(lump_fact);
 
-    for (unsigned int i = 0; i < number_of_nodes; ++i) {
+    for (SizeType i = 0; i < number_of_nodes; ++i) {
         const double temp = lump_fact[i] * total_mass;
 
-        for (unsigned int j = 0; j < 3; ++j)
+        for (SizeType j = 0; j < 3; ++j)
         {
-            const unsigned int index = i * 3 + j;
+            const SizeType index = i * 3 + j;
             rRightHandSideVector[index] += temp * r_geom[i].FastGetSolutionStepValue(VOLUME_ACCELERATION)[j];
         }
     }
     KRATOS_CATCH("")
 }
 
-void MembraneElement::PrincipleVector(Vector& rPrincipleVector, const Vector& rNonPrincipleVector)
+void MembraneElement::PrincipalVector(Vector& rPrincipalVector, const Vector& rNonPrincipalVector)
 {
-    // make sure to divide rNonPrincipleVector[2]/2 if strains are passed
-    rPrincipleVector = ZeroVector(2);
-    rPrincipleVector[0] = 0.50 * (rNonPrincipleVector[0]+rNonPrincipleVector[1]) + std::sqrt(0.25*(std::pow(rNonPrincipleVector[0]-rNonPrincipleVector[1],2.0)) + std::pow(rNonPrincipleVector[2],2.0));
-    rPrincipleVector[1] = 0.50 * (rNonPrincipleVector[0]+rNonPrincipleVector[1]) - std::sqrt(0.25*(std::pow(rNonPrincipleVector[0]-rNonPrincipleVector[1],2.0)) + std::pow(rNonPrincipleVector[2],2.0));
+    // make sure to divide rNonPrincipalVector[2]/2 if strains are passed
+    rPrincipalVector = ZeroVector(2);
+    rPrincipalVector[0] = 0.50 * (rNonPrincipalVector[0]+rNonPrincipalVector[1]) + std::sqrt(0.25*(std::pow(rNonPrincipalVector[0]-rNonPrincipalVector[1],2.0)) + std::pow(rNonPrincipalVector[2],2.0));
+    rPrincipalVector[1] = 0.50 * (rNonPrincipalVector[0]+rNonPrincipalVector[1]) - std::sqrt(0.25*(std::pow(rNonPrincipalVector[0]-rNonPrincipalVector[1],2.0)) + std::pow(rNonPrincipalVector[2],2.0));
 }
 
-void MembraneElement::CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray, const Vector& rStress, const Vector& rStrain,
-    Vector& rWrinklingDirection)
+void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const Vector& rStress, const Vector& rStrain, Vector& rWrinklingDirectionVector)
 {
-    // rWrinklingStateArray (taut,wrinkled,slack)
     const double numerical_limit = std::numeric_limits<double>::epsilon();
 
-    Vector principle_strains = ZeroVector(2);
+    Vector principal_strains = ZeroVector(2);
     Vector temp_strains = ZeroVector(3);
     temp_strains = rStrain;
-    temp_strains[2] /= 2.0; // normalize voigt strain vector to calcualte principle strains
-    PrincipleVector(principle_strains,temp_strains);
+    temp_strains[2] /= 2.0; // normalize voigt strain vector to calcualte principal strains
+    PrincipalVector(principal_strains,temp_strains);
 
 
-    Vector principle_stresses = ZeroVector(2);
-    PrincipleVector(principle_stresses,rStress);
+    Vector principal_stresses = ZeroVector(2);
+    PrincipalVector(principal_stresses,rStress);
 
-    const double min_stress = std::min(principle_stresses[0],principle_stresses[1]);
-    const double max_strain = std::max(principle_strains[0],principle_strains[1]);
+    const double min_stress = std::min(principal_stresses[0],principal_stresses[1]);
+    const double max_stress = std::max(principal_stresses[0],principal_stresses[1]);
+    const double max_strain = std::max(principal_strains[0],principal_strains[1]);
+
+    //direction check
+    Vector min_stress_dir = ZeroVector(2);
+    if (std::abs(rStress[2])>numerical_limit){
+        min_stress_dir[0] = 1.0;
+        min_stress_dir[1] = (min_stress-rStress[0]) / rStress[2];
+        min_stress_dir /= MathUtils<double>::Norm(min_stress_dir);
+    }
+    else if (std::abs(min_stress-rStress[0]) < numerical_limit) {
+        min_stress_dir[0] = 1.0;
+    }
+    else if (std::abs(min_stress-rStress[1]) < numerical_limit) {
+        min_stress_dir[1] = 1.0;
+    }
+    else KRATOS_ERROR << "error in principal direction calculation 1 of membrane element with id " << Id() << std::endl;
+
+
+    rWrinklingDirectionVector = ZeroVector(3);
 
     if (min_stress > 0.0){
-        // taut
-        rWrinklingStateArray[0] = true;
-        rWrinklingStateArray[1] = false;
-        rWrinklingStateArray[2] = false;
+        rWrinklingState = WrinklingType::Taut;
+        std::cout << "taut" << std::endl;
     } else if ((max_strain > 0.0) && (min_stress < numerical_limit)){
-        // wrinkled
-        rWrinklingStateArray[0] = false;
-        rWrinklingStateArray[1] = true;
-        rWrinklingStateArray[2] = false;
+        rWrinklingState = WrinklingType::Wrinkle;
+        std::cout << "wrinkle" << std::endl;
+
+        rWrinklingDirectionVector[0] = min_stress_dir[0]*min_stress_dir[0];
+        rWrinklingDirectionVector[1] = min_stress_dir[1]*min_stress_dir[1];
+        rWrinklingDirectionVector[2] = 2.0*min_stress_dir[0]*min_stress_dir[1];
+
     } else if (max_strain<numerical_limit){
-        // slack
-        rWrinklingStateArray[0] = false;
-        rWrinklingStateArray[1] = false;
-        rWrinklingStateArray[2] = true;
+        rWrinklingState = WrinklingType::Slack;
+        std::cout << "slack" << std::endl;
     }
-    else KRATOS_ERROR << "error in principle direction calculation of membrane element with id " << Id() << std::endl;
-
-    rWrinklingDirection = ZeroVector(3);
-    //using the stress -> change this for orthotropic cases
-    const double alpha_2 = std::atan((2.0*rStress[2])/(rStress[0]-rStress[1]));
-    const double beta = (M_PI-alpha_2)/2.0;
-
-    rWrinklingDirection[0] = std::cos(beta);
-    rWrinklingDirection[1] = std::sin(beta);
+    else KRATOS_ERROR << "error in principal direction calculation 2 of membrane element with id " << Id() << std::endl;
+    KRATOS_WATCH(min_stress);
+    KRATOS_WATCH(max_stress);
+    KRATOS_WATCH(rStress);
+    KRATOS_WATCH(min_stress_dir);
+    std::cout << "___________________" << std::endl;
 }
 
 //***********************************************************************************
@@ -1161,8 +1329,11 @@ void MembraneElement::CheckWrinklingState(array_1d<bool,3>& rWrinklingStateArray
 int MembraneElement::Check(const ProcessInfo& rCurrentProcessInfo)
 {
     KRATOS_TRY
-    const unsigned int number_of_nodes = this->GetGeometry().size();
-    // const unsigned int dimension = this->GetGeometry().WorkingSpaceDimension();
+    const SizeType number_of_nodes = this->GetGeometry().size();
+    const SizeType dimension = this->GetGeometry().WorkingSpaceDimension();
+
+    KRATOS_ERROR_IF_NOT(rCurrentProcessInfo[DOMAIN_SIZE]==3) << "DOMAIN_SIZE in element " << Id() << " is not 3" << std::endl;
+    KRATOS_ERROR_IF_NOT(dimension==3) << "dimension in element " << Id() << " is not 3" << std::endl;
 
     // Verify that the variables are correctly initialized
     KRATOS_CHECK_VARIABLE_KEY(DISPLACEMENT)
@@ -1173,7 +1344,7 @@ int MembraneElement::Check(const ProcessInfo& rCurrentProcessInfo)
     KRATOS_CHECK_VARIABLE_KEY(THICKNESS)
 
     // Check that the element's nodes contain all required SolutionStepData and Degrees of freedom
-    for ( unsigned int i = 0; i < number_of_nodes; i++ ) {
+    for ( SizeType i = 0; i < number_of_nodes; i++ ) {
         const Node<3> &r_node = this->GetGeometry()[i];
         KRATOS_CHECK_VARIABLE_IN_NODAL_DATA(DISPLACEMENT,r_node)
 
@@ -1187,7 +1358,7 @@ int MembraneElement::Check(const ProcessInfo& rCurrentProcessInfo)
         << "Constitutive law not provided for property " << this->GetProperties().Id() << std::endl;
 
     // Verify that the constitutive law has the correct dimension
-    const unsigned int strain_size = this->GetProperties().GetValue( CONSTITUTIVE_LAW )->GetStrainSize();
+    const SizeType strain_size = this->GetProperties().GetValue( CONSTITUTIVE_LAW )->GetStrainSize();
     KRATOS_ERROR_IF( strain_size != 3) << "Wrong constitutive law used. This is a membrane element! "
         << "Expected strain size is 3 (el id = " << this->Id() << ")" << std::endl;
     return 0;
@@ -1198,13 +1369,13 @@ int MembraneElement::Check(const ProcessInfo& rCurrentProcessInfo)
 void MembraneElement::save(Serializer& rSerializer) const
     {
       KRATOS_SERIALIZE_SAVE_BASE_CLASS(rSerializer, Element);
-      rSerializer.save("mpConstitutiveLaw", mpConstitutiveLaw);
+      rSerializer.save("mConstitutiveLawVector", mConstitutiveLawVector);
     }
 
     void MembraneElement::load(Serializer& rSerializer)
     {
       KRATOS_SERIALIZE_LOAD_BASE_CLASS(rSerializer, Element);
-      rSerializer.save("mpConstitutiveLaw", mpConstitutiveLaw);
+      rSerializer.save("mConstitutiveLawVector", mConstitutiveLawVector);
     }
 
 
