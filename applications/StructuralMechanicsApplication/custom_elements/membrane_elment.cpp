@@ -384,7 +384,7 @@ void MembraneElement::StressPk2(Vector& rStress,
         if (current_wrinkling_sate==WrinklingType::Slack){
             rStress = ZeroVector(3);
             // this should be used but not in the first step !
-            //rConsitutiveMatrix = ZeroMatrix(3);
+            rConsitutiveMatrix = ZeroMatrix(3);
         }
         // wrinkling
         else if (current_wrinkling_sate==WrinklingType::Wrinkle){
@@ -1301,7 +1301,9 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
 
     rWrinklingDirectionVector = ZeroVector(3);
 
-    if (min_stress > 0.0){
+
+    if ((min_stress > 0.0) || ((std::abs(min_stress)<numerical_limit) && (std::abs(max_stress)<numerical_limit))){
+        //second if-statement necessary for first iteration
         rWrinklingState = WrinklingType::Taut;
         std::cout << "taut" << std::endl;
     } else if ((max_strain > 0.0) && (min_stress < numerical_limit)){
@@ -1316,6 +1318,7 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
         rWrinklingState = WrinklingType::Slack;
         std::cout << "slack" << std::endl;
     }
+
     else KRATOS_ERROR << "error in principal direction calculation 2 of membrane element with id " << Id() << std::endl;
     KRATOS_WATCH(min_stress);
     KRATOS_WATCH(max_stress);
