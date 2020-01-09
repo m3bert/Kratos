@@ -369,16 +369,18 @@ void MembraneElement::StressPk2(Vector& rStress,
     if (GetProperties().Has( IS_FORMFINDING ) ){
         consider_wrinkling = GetProperties()[IS_FORMFINDING];
     }
-    //// check wrinkling
-    // rWrinklingStateArray (taut,wrinkled,slack)
-    Vector wrinkling_direction = ZeroVector(3);
-    WrinklingType current_wrinkling_sate;
-    CheckWrinklingState(current_wrinkling_sate,rStress,strain_vector,wrinkling_direction);
 
     if (consider_wrinkling) {
         //todo: consider cauchy stress for wrinkling direction
         //todo: consider C_II for proper convergence of NR
         //hint: this is for linear elastic materials right now
+
+        //// check wrinkling
+        // rWrinklingStateArray (taut,wrinkled,slack)
+        Vector wrinkling_direction = ZeroVector(3);
+        WrinklingType current_wrinkling_sate;
+        CheckWrinklingState(current_wrinkling_sate,rStress,strain_vector,wrinkling_direction);
+
 
         // slack
         if (current_wrinkling_sate==WrinklingType::Slack){
@@ -424,8 +426,8 @@ void MembraneElement::StressPk2(Vector& rStress,
             AddPreStressPk2(rStress,rTransformedBaseVectors);
             rConsitutiveMatrix = material_tangent_modulus_modified;
 
-            KRATOS_WATCH(rStress);
-            std::cout << "''''''''''''''''''''''''" << std::endl;
+            /* KRATOS_WATCH(rStress);
+            std::cout << "''''''''''''''''''''''''" << std::endl; */
         }
         // else: taut, do nothing special
     }
@@ -1290,13 +1292,26 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
         min_stress_dir[1] = (min_stress-rStress[0]) / rStress[2];
         min_stress_dir /= MathUtils<double>::Norm(min_stress_dir);
     }
-    else if (std::abs(min_stress-rStress[0]) < numerical_limit) {
+    else {
+        const double stress_diff_1 = std::abs(min_stress-rStress[0]);
+        const double stress_diff_2 = std::abs(min_stress-rStress[1]);
+        if (stress_diff_1<=stress_diff_2) min_stress_dir[0] = 1.0;
+        else if (stress_diff_2<stress_diff_1) min_stress_dir[1] = 1.0;
+        else KRATOS_ERROR << "error in principal direction calculation 1 of membrane element with id " << Id() << std::endl;
+    }
+    /* else if (std::abs(min_stress-rStress[0]) < numerical_limit) {
         min_stress_dir[0] = 1.0;
     }
     else if (std::abs(min_stress-rStress[1]) < numerical_limit) {
         min_stress_dir[1] = 1.0;
     }
-    else KRATOS_ERROR << "error in principal direction calculation 1 of membrane element with id " << Id() << std::endl;
+    else {
+        KRATOS_WATCH(rStress);
+        KRATOS_WATCH(min_stress);
+        KRATOS_WATCH(max_stress);
+        KRATOS_ERROR << "error in principal direction calculation 1 of membrane element with id " << Id() << std::endl;
+    } */
+
 
 
     rWrinklingDirectionVector = ZeroVector(3);
@@ -1305,10 +1320,10 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
     if ((min_stress > 0.0) || ((std::abs(min_stress)<numerical_limit) && (std::abs(max_stress)<numerical_limit))){
         //second if-statement necessary for first iteration
         rWrinklingState = WrinklingType::Taut;
-        std::cout << "taut" << std::endl;
+        //std::cout << "taut" << std::endl;
     } else if ((max_strain > 0.0) && (min_stress < numerical_limit)){
         rWrinklingState = WrinklingType::Wrinkle;
-        std::cout << "wrinkle" << std::endl;
+        //std::cout << "wrinkle" << std::endl;
 
         rWrinklingDirectionVector[0] = min_stress_dir[0]*min_stress_dir[0];
         rWrinklingDirectionVector[1] = min_stress_dir[1]*min_stress_dir[1];
@@ -1316,15 +1331,15 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
 
     } else if (max_strain<numerical_limit){
         rWrinklingState = WrinklingType::Slack;
-        std::cout << "slack" << std::endl;
+        //std::cout << "slack" << std::endl;
     }
 
     else KRATOS_ERROR << "error in principal direction calculation 2 of membrane element with id " << Id() << std::endl;
-    KRATOS_WATCH(min_stress);
+    /* KRATOS_WATCH(min_stress);
     KRATOS_WATCH(max_stress);
     KRATOS_WATCH(rStress);
     KRATOS_WATCH(min_stress_dir);
-    std::cout << "___________________" << std::endl;
+    std::cout << "___________________" << std::endl; */
 }
 
 //***********************************************************************************
