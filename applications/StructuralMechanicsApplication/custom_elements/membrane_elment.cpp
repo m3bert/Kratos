@@ -377,7 +377,7 @@ void MembraneElement::StressPk2(Vector& rStress,
 
         //// check wrinkling
         // rWrinklingStateArray (taut,wrinkled,slack)
-        Vector wrinkling_direction = ZeroVector(3);
+        Vector wrinkling_direction = ZeroVector(2);
         WrinklingType current_wrinkling_sate;
         CheckWrinklingState(current_wrinkling_sate,rStress,strain_vector,wrinkling_direction);
 
@@ -391,12 +391,79 @@ void MembraneElement::StressPk2(Vector& rStress,
         // wrinkling
         else if (current_wrinkling_sate==WrinklingType::Wrinkle){
 
+
+            const double n_1 = wrinkling_direction[0];
+            const double n_2 = wrinkling_direction[1];
+            /* const double m_1 = -wrinkling_direction[1];
+            const double m_2 = wrinkling_direction[0]; */
+
             // this should be done better
-            Matrix wrinkling_operation_vector = ZeroMatrix(3,1);
-            wrinkling_operation_vector(0,0) = wrinkling_direction[0];
-            wrinkling_operation_vector(1,0) = wrinkling_direction[1];
-            wrinkling_operation_vector(2,0) = wrinkling_direction[2];
+            /* Matrix wrinkling_operation_vector_1 = ZeroMatrix(3,1);
+            wrinkling_operation_vector_1(0,0) = n_1*n_1;
+            wrinkling_operation_vector_1(1,0) = n_2*n_2;
+            wrinkling_operation_vector_1(2,0) = n_1*n_2*2.0;
             //
+            // change C
+            // set C
+            Matrix material_tangent_modulus_modified = ZeroMatrix(3);
+            material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector_1));
+            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
+
+            Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            scale_mat_vec = prod(trans(wrinkling_operation_vector_1),scale_mat_vec);
+
+            material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
+            material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified; */
+
+
+            Vector wrinkling_operation_vector_1 = ZeroVector(3);
+            wrinkling_operation_vector_1[0] = n_1*n_1;
+            wrinkling_operation_vector_1[1] = n_2*n_2;
+            wrinkling_operation_vector_1[2] = n_1*n_2*2.0;
+
+
+            Vector temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            Matrix temp_mat = outer_prod(temp_vec,wrinkling_operation_vector_1);
+            Matrix material_tangent_modulus_modified_1 = prod(temp_mat,material_tangent_modulus);
+            double temp_double = inner_prod(wrinkling_operation_vector_1,temp_vec);
+
+            material_tangent_modulus_modified_1 /= temp_double;
+            material_tangent_modulus_modified_1 = material_tangent_modulus - material_tangent_modulus_modified_1;
+
+
+
+            //////////////////////////////////////
+            // add C2
+
+            /* Matrix wrinkling_operation_vector_2 = ZeroMatrix(3,1);
+            wrinkling_operation_vector_2(0,0) = m_1*n_1;
+            wrinkling_operation_vector_2(1,0) = m_2*n_2;
+            wrinkling_operation_vector_2(2,0) = (m_1*n_2)+(m_2*n_1);
+
+            Matrix wrinkling_operation_vector_4 = ZeroMatrix(3,1);
+            wrinkling_operation_vector_4(0,0) = m_1*m_1;
+            wrinkling_operation_vector_4(1,0) = m_2*m_2;
+            wrinkling_operation_vector_4(2,0) = m_1*m_2*2.0;
+
+
+
+
+            Vector temp_vec = prod(material_tangent_modulus,strain_vector);
+            double gamma = -1.0 * inner_prod(trans(wrinkling_operation_vector_1),temp_vec) */
+
+            /* Matrix temp_mat = prod(trans(wrinkling_operation_vector_1),temp_vec)
+            double gamma = -1.0 * temp_mat(0,0);
+            temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            temp_mat = prod(trans(wrinkling_operation_vector_1),temp_vec);
+            gamma /= temp_mat(0,0); */
+
+
+
+
+
+
+            //////////////////////////////////////
 
             rStress = ZeroVector(3);
             ConstitutiveLaw::Parameters wrinkled_element_parameters(GetGeometry(),GetProperties(),temp_process_information);
@@ -405,26 +472,11 @@ void MembraneElement::StressPk2(Vector& rStress,
             wrinkled_element_parameters.Set(ConstitutiveLaw::COMPUTE_STRESS);
             wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_STRAIN);
             wrinkled_element_parameters.Set(ConstitutiveLaw::USE_ELEMENT_PROVIDED_CONSTITUTIVE_TENSOR);
-
-            // change C
-            // set C
-            Matrix material_tangent_modulus_modified = ZeroMatrix(3);
-            material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector);
-            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector));
-            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
-
-            Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector);
-            scale_mat_vec = prod(trans(wrinkling_operation_vector),scale_mat_vec);
-
-            material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
-            material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified;
-
-
-            wrinkled_element_parameters.SetConstitutiveMatrix(material_tangent_modulus_modified);
+            wrinkled_element_parameters.SetConstitutiveMatrix(material_tangent_modulus_modified_1);
             mConstitutiveLawVector[rIntegrationPointNumber]->CalculateMaterialResponse(wrinkled_element_parameters,ConstitutiveLaw::StressMeasure_PK2);
 
             AddPreStressPk2(rStress,rTransformedBaseVectors);
-            rConsitutiveMatrix = material_tangent_modulus_modified;
+            rConsitutiveMatrix = material_tangent_modulus_modified_1;
 
             /* KRATOS_WATCH(rStress);
             std::cout << "''''''''''''''''''''''''" << std::endl; */
@@ -1314,7 +1366,7 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
 
 
 
-    rWrinklingDirectionVector = ZeroVector(3);
+    rWrinklingDirectionVector = ZeroVector(2);
 
 
     if ((min_stress > 0.0) || ((std::abs(min_stress)<numerical_limit) && (std::abs(max_stress)<numerical_limit))){
@@ -1325,9 +1377,12 @@ void MembraneElement::CheckWrinklingState(WrinklingType& rWrinklingState, const 
         rWrinklingState = WrinklingType::Wrinkle;
         //std::cout << "wrinkle" << std::endl;
 
-        rWrinklingDirectionVector[0] = min_stress_dir[0]*min_stress_dir[0];
+        /* rWrinklingDirectionVector[0] = min_stress_dir[0]*min_stress_dir[0];
         rWrinklingDirectionVector[1] = min_stress_dir[1]*min_stress_dir[1];
-        rWrinklingDirectionVector[2] = 2.0*min_stress_dir[0]*min_stress_dir[1];
+        rWrinklingDirectionVector[2] = 2.0*min_stress_dir[0]*min_stress_dir[1]; */
+
+        rWrinklingDirectionVector[0] = min_stress_dir[0];
+        rWrinklingDirectionVector[1] = min_stress_dir[1];
 
     } else if (max_strain<numerical_limit){
         rWrinklingState = WrinklingType::Slack;
