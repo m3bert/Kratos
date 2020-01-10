@@ -30,11 +30,11 @@ if(${KRATOS_BUILD_TESTING} MATCHES ON)
     file(GLOB_RECURSE KRATOS_CHIMERA_APPLICATION_TESTING_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
 endif(${KRATOS_BUILD_TESTING} MATCHES ON)
 
-if((${MPI_NEEDED} MATCHES ON))
+if((${USE_MPI} MATCHES ON))
  set(EXTRA_LIBRARIES "KratosMPICore")
 else()
  set(EXTRA_LIBRARIES "")
-endif((${MPI_NEEDED} MATCHES ON))
+endif((${USE_MPI} MATCHES ON))
 
 ## ChimeraApplication python interface sources
 file(GLOB_RECURSE KRATOS_CHIMERA_APPLICATION_PYTHON_INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/custom_python/*.cpp)
@@ -100,7 +100,7 @@ install(TARGETS KratosChimeraApplication DESTINATION libs )
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/ChimeraApplication.py" DESTINATION "KratosMultiphysics/ChimeraApplication" RENAME "__init__.py")
 
 ###############################################################################
-## If trilinos is avaliable, switch on the Fluid trilinos extension
+## If trilinos is avaliable, switch on the Chimera trilinos extension
 
 if((${MPI_NEEDED} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON))
   message("Enabling trilinos extension for KratosChimeraApplication")
