@@ -502,7 +502,7 @@ class ResidualBasedNewtonRaphsonStrategy
 
         // Applying constraints if needed
         auto& r_constraints_array = BaseType::GetModelPart().MasterSlaveConstraints();
-        const std::size_t local_number_of_constraints = r_constraints_array.size();
+        const int local_number_of_constraints = r_constraints_array.size();
         const int global_number_of_constraints = r_comm.SumAll(local_number_of_constraints);
         if(global_number_of_constraints != 0) {
             const auto& r_process_info = BaseType::GetModelPart().GetProcessInfo();
@@ -607,7 +607,10 @@ class ResidualBasedNewtonRaphsonStrategy
         TSystemVectorType& rb = *mpb;
 
         if (mpConvergenceCriteria->GetActualizeRHSflag() == true)
+        {
+            TSparseSpace::SetToZero(rb);
             GetBuilderAndSolver()->BuildRHS(GetScheme(), BaseType::GetModelPart(), rb);
+        }
 
         return mpConvergenceCriteria->PostCriteria(BaseType::GetModelPart(), GetBuilderAndSolver()->GetDofSet(), rA, rDx, rb);
 
