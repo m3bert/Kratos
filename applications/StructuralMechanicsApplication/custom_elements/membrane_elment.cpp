@@ -397,26 +397,6 @@ void MembraneElement::StressPk2(Vector& rStress,
             /* const double m_1 = -wrinkling_direction[1];
             const double m_2 = wrinkling_direction[0]; */
 
-            // this should be done better
-            /* Matrix wrinkling_operation_vector_1 = ZeroMatrix(3,1);
-            wrinkling_operation_vector_1(0,0) = n_1*n_1;
-            wrinkling_operation_vector_1(1,0) = n_2*n_2;
-            wrinkling_operation_vector_1(2,0) = n_1*n_2*2.0;
-            //
-            // change C
-            // set C
-            Matrix material_tangent_modulus_modified = ZeroMatrix(3);
-            material_tangent_modulus_modified = prod(material_tangent_modulus,wrinkling_operation_vector_1);
-            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,trans(wrinkling_operation_vector_1));
-            material_tangent_modulus_modified = prod(material_tangent_modulus_modified,material_tangent_modulus);
-
-            Matrix scale_mat_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
-            scale_mat_vec = prod(trans(wrinkling_operation_vector_1),scale_mat_vec);
-
-            material_tangent_modulus_modified = material_tangent_modulus_modified/scale_mat_vec(0,0);
-            material_tangent_modulus_modified = material_tangent_modulus-material_tangent_modulus_modified; */
-
-
             Vector wrinkling_operation_vector_1 = ZeroVector(3);
             wrinkling_operation_vector_1[0] = n_1*n_1;
             wrinkling_operation_vector_1[1] = n_2*n_2;
@@ -436,30 +416,54 @@ void MembraneElement::StressPk2(Vector& rStress,
             //////////////////////////////////////
             // add C2
 
-            /* Matrix wrinkling_operation_vector_2 = ZeroMatrix(3,1);
-            wrinkling_operation_vector_2(0,0) = m_1*n_1;
-            wrinkling_operation_vector_2(1,0) = m_2*n_2;
-            wrinkling_operation_vector_2(2,0) = (m_1*n_2)+(m_2*n_1);
+            /* Vector wrinkling_operation_vector_2 = ZeroVector(3);
+            wrinkling_operation_vector_2[0] = m_1*n_1;
+            wrinkling_operation_vector_2[1] = m_2*n_2;
+            wrinkling_operation_vector_2[2] = (m_1*n_2)+(m_2*n_1);
 
-            Matrix wrinkling_operation_vector_4 = ZeroMatrix(3,1);
-            wrinkling_operation_vector_4(0,0) = m_1*m_1;
-            wrinkling_operation_vector_4(1,0) = m_2*m_2;
-            wrinkling_operation_vector_4(2,0) = m_1*m_2*2.0;
-
-
+            Vector wrinkling_operation_vector_4 = ZeroVector(3);
+            wrinkling_operation_vector_4[0] = m_1*m_1;
+            wrinkling_operation_vector_4[1] = m_2*m_2;
+            wrinkling_operation_vector_4[2] = m_1*m_2*2.0;
 
 
-            Vector temp_vec = prod(material_tangent_modulus,strain_vector);
-            double gamma = -1.0 * inner_prod(trans(wrinkling_operation_vector_1),temp_vec) */
-
-            /* Matrix temp_mat = prod(trans(wrinkling_operation_vector_1),temp_vec)
-            double gamma = -1.0 * temp_mat(0,0);
+            // calculate gamma
+            temp_vec = prod(material_tangent_modulus,strain_vector);
+            double gamma = -1.0 * inner_prod(wrinkling_operation_vector_1,temp_vec);
             temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
-            temp_mat = prod(trans(wrinkling_operation_vector_1),temp_vec);
-            gamma /= temp_mat(0,0); */
+            gamma /= inner_prod(wrinkling_operation_vector_1,temp_vec);
+
+            // calculate b vector
+            temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_2);
+            temp_double = inner_prod(wrinkling_operation_vector_1,temp_vec);
+            temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            temp_double /= inner_prod(wrinkling_operation_vector_1,temp_vec);
+            temp_vec = temp_double * wrinkling_operation_vector_1;
+            Vector b_vec = wrinkling_operation_vector_2 - temp_vec;
+
+            // calculate d_f/d_psi
+            Vector temp_vec_2 = strain_vector + (gamma * wrinkling_operation_vector_1);
+            temp_vec = prod(material_tangent_modulus,temp_vec_2);
+            double df_dpsi = inner_prod(wrinkling_operation_vector_4,temp_vec);
+
+            temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_2);
+            temp_double = inner_prod(wrinkling_operation_vector_2,temp_vec);
+            df_dpsi += 2.0 * gamma * temp_double;
+
+            temp_double = inner_prod(wrinkling_operation_vector_1,temp_vec);
+            temp_vec = prod(material_tangent_modulus,wrinkling_operation_vector_1);
+            double temp_double_2 = inner_prod(wrinkling_operation_vector_1,temp_vec);
+
+            df_dpsi -= 2.0 * gamma * temp_double * temp_double / temp_double_2;
 
 
 
+            Matrix material_tangent_modulus_modified_2 = material_tangent_modulus_modified_1;
+            temp_vec = prod(material_tangent_modulus,b_vec);
+            temp_mat = outer_prod(temp_vec,b_vec);
+            Matrix temp_mat_2 = prod(temp_mat,material_tangent_modulus);
+
+            material_tangent_modulus_modified_2 += temp_mat_2 * 2.0 * gamma / df_dpsi; */
 
 
 
