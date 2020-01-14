@@ -102,7 +102,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/ChimeraApplication.py" DESTINATION "K
 ###############################################################################
 ## If trilinos is avaliable, switch on the Chimera trilinos extension
 
-if((${MPI_NEEDED} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON))
+if((${USE_MPI} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON))
   message("Enabling trilinos extension for KratosChimeraApplication")
   add_subdirectory(trilinos_extension)
-endif((${MPI_NEEDED} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON) )
+endif((${USE_MPI} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON) )
