@@ -44,9 +44,6 @@ void AddTrilinosStrategiesToPython(pybind11::module& m)
     typedef BuilderAndSolver< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType > TrilinosBaseBuilderAndSolverType;
     typedef TrilinosChimeraBlockBuilderAndSolver< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType > TrilinosChimeraResidualBasedBuilderAndSolverType;
 
-    using TrilinosBaseSolvingStrategy = SolvingStrategy< TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType >;
-    using BaseSolverSettings = SolverSettings<TrilinosSparseSpaceType, TrilinosLocalSpaceType, TrilinosLinearSolverType>;
-
     py::class_<
         TrilinosChimeraResidualBasedBuilderAndSolverType,
         typename TrilinosChimeraResidualBasedBuilderAndSolverType::Pointer,

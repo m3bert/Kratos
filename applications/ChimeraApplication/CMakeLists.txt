@@ -96,13 +96,13 @@ endif(USE_COTIRE MATCHES ON)
 install(TARGETS KratosChimeraApplicationCore DESTINATION libs )
 install(TARGETS KratosChimeraApplication DESTINATION libs )
 
-# Add to the KratosMultiphisics Python module 
+# Add to the KratosMultiphisics Python module
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/ChimeraApplication.py" DESTINATION "KratosMultiphysics/ChimeraApplication" RENAME "__init__.py")
 
 ###############################################################################
 ## If trilinos is avaliable, switch on the Chimera trilinos extension
 
-if((${USE_MPI} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON))
+if((${USE_MPI} MATCHES ON) )
   message("Enabling trilinos extension for KratosChimeraApplication")
   add_subdirectory(trilinos_extension)
-endif((${USE_MPI} MATCHES ON) AND (${TRILINOS_APPLICATION} MATCHES ON) )
+endif((${USE_MPI} MATCHES ON) )
