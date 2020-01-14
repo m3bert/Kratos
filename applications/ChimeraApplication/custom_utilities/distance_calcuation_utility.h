@@ -24,6 +24,7 @@
 #include "processes/calculate_signed_distance_to_3d_condition_skin_process.h"
 #include "mpi/utilities/gather_modelpart_utility.h"
 #include "processes/fast_transfer_between_model_parts_process.h"
+#include "utilities/variable_utils.h"
 
 #ifdef KRATOS_USING_MPI
 #include "mpi/utilities/parallel_fill_communicator.h"
@@ -111,6 +112,7 @@ public:
         auto p_distance_smoother = Kratos::make_shared<ParallelDistanceCalculator<TDim>>();
         p_distance_smoother->CalculateDistances(rVolumeModelPart, DISTANCE, NODAL_AREA, max_level, max_distance);
 
+        VariableUtils().CopyScalarVar(DISTANCE, CHIMERA_DISTANCE, rBackgroundModelPart.Nodes());
 
         current_model.DeleteModelPart("GatheredSkin");
     }
@@ -273,6 +275,7 @@ public:
             rGatheredModelPart.Conditions().push_back(*it.base());
         }
         // rGatheredModelPart.Conditions().Unique();
+
     }
 
     ///@}

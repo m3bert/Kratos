@@ -8,7 +8,7 @@ from copy import deepcopy
 
 def ImportChimeraModelparts(main_modelpart, chimera_mp_import_settings_list, material_file="", parallel_type="OpenMP"):
     '''
-        This function extends and specifies the functionalies of the
+        This function extends the functionalies of the
         mpda_manipulator from: https://github.com/philbucher/mdpa-manipulator
 
         main_modelpart      : The modelpart to which the new modelparts are appended to.
@@ -22,11 +22,16 @@ def ImportChimeraModelparts(main_modelpart, chimera_mp_import_settings_list, mat
         }
     '''
     if parallel_type == "OpenMP":
+        import KratosMultiphysics
         for mp_import_setting in chimera_mp_import_settings_list:
             mdpa_file_name = mp_import_setting["input_filename"].GetString()
             if mdpa_file_name.endswith('.mdpa'):
                 mdpa_file_name = mdpa_file_name[:-5]
-            model_part = ReadModelPart(mdpa_file_name, "new_modelpart", material_file)
+
+            model = KratosMultiphysics.Model()
+            model_part = model.CreateModelPart("new_modelpart")
+
+            ReadModelPart(mdpa_file_name, model_part, material_file)
             AddModelPart(main_modelpart, model_part)
     elif(parallel_type == "MPI"):
         import KratosMultiphysics
@@ -61,14 +66,10 @@ def ImportChimeraModelparts(main_modelpart, chimera_mp_import_settings_list, mat
             ParallelFillCommunicator.Execute()
 
 
-def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
+def ReadModelPart(mdpa_file_name, model_part, materials_file_name=""):
     '''
     Read and return a ModelPart from a mdpa file
     '''
-    if mdpa_file_name.endswith('.mdpa'):
-        mdpa_file_name = mdpa_file_name[:-5]
-    model = KratosMultiphysics.Model()
-    model_part = model.CreateModelPart(model_part_name)
     # We reorder because otherwise the numbering might be screwed up when we combine the ModelParts later
     KratosMultiphysics.ReorderConsecutiveModelPartIO(mdpa_file_name, KratosMultiphysics.IO.SKIP_TIMER).ReadModelPart(model_part)
 
@@ -81,7 +82,6 @@ def ReadModelPart(mdpa_file_name, model_part_name, materials_file_name=""):
         model_part[KratosMultiphysics.IDENTIFIER] = materials_string
 
     __RemoveAuxFiles()
-    return model_part
 
 def AddModelPart(model_part_1,
                  model_part_2,
@@ -231,7 +231,52 @@ def __RemoveAuxFiles():
         if file.endswith(".time") or file.endswith(".lst"):
             os.remove(os.path.join(current_path, file))
 
+def CombineMaterialProperties(to_model_part, from_model_part, model_part_name):
 
+    if not to_model_part.ProcessInfo.Has(KratosMultiphysics.IDENTIFIER):
+        # in case the ModelPart does not have materials specified, add empty ones
+        empty_props = {"properties" : []}
+        to_model_part.ProcessInfo[KratosMultiphysics.IDENTIFIER] = json.dumps(empty_props)
+
+    existing_props = json.loads(to_model_part.ProcessInfo[KratosMultiphysics.IDENTIFIER])
+    num_existing_props = len(existing_props["properties"])
+    props_by_name_dict = {mat["model_part_name"] : mat for mat in existing_props["properties"]}
+
+    new_props = json.loads(from_model_part.ProcessInfo[KratosMultiphysics.IDENTIFIER])
+    new_props_to_add = []
+
+    for i, props in enumerate(new_props["properties"]):
+        current_model_part_name = props["model_part_name"].split(".")
+
+        if current_model_part_name[0] == to_model_part.Name: # this means that the name of the MainModelPart is added
+            current_model_part_name.pop(0) # remove the MainModelPart-Name
+
+        new_model_part_name = model_part_name + "." + ".".join([name for name in current_model_part_name])
+        props["model_part_name"] = new_model_part_name # done here bcs also needed for check
+        if new_model_part_name in props_by_name_dict: # properties for this ModelPart exist already
+            # check (again, this should have been checked before and should not fail here!) if the props are the same
+            if not __MaterialsListsAreEqual([props_by_name_dict[new_model_part_name]], [props]):
+                err_msg  = 'Different properties for ModelPart "' + new_model_part_name + '" exist!\n'
+                err_msg += 'This should not happen here, the error should have been thrown earlier when adding the ModelParts'
+                raise Exception(err_msg)
+        else:
+            props["new_properties_id"] = num_existing_props + i + 1
+            new_props_to_add.append(props)
+
+    existing_props["properties"].extend(new_props_to_add)
+    to_model_part.ProcessInfo[KratosMultiphysics.IDENTIFIER] = json.dumps(existing_props)
+
+
+def __MaterialsListsAreEqual(original_materials,
+                             other_materials):
+    '''
+    In order to compare the materials the "new_properties_id" is removed
+    '''
+    copy_original_materials = deepcopy(original_materials) # make a copy to not modify the original list
+    for mat in copy_original_materials:
+        mat.pop("new_properties_id")
+
+    return copy_original_materials == other_materials
 
 
 

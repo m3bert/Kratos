@@ -291,11 +291,11 @@ protected:
         for (auto &current_level : mParameters)
         {
             ChimeraHoleCuttingUtility::Domain domain_type = ChimeraHoleCuttingUtility::Domain::MAIN_BACKGROUND;
-            for (auto &background_param : current_level)
+            for (auto &background_patch_param : current_level)
             { // Gives the current background
-                background_param.ValidateAndAssignDefaults(parameters_for_validation);
+                background_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
                 Model &current_model = mrMainModelPart.GetModel();
-                ModelPart &r_background_model_part = current_model.GetModelPart(background_param["model_part_name"].GetString());
+                ModelPart &r_background_model_part = current_model.GetModelPart(background_patch_param["model_part_name"].GetString());
                 // compute the outerboundary of the background to save
                 if (i_current_level == 0)
                     if (!r_background_model_part.HasSubModelPart(mBoundaryName))
@@ -308,14 +308,14 @@ protected:
 
                 for (IndexType i_slave_level = i_current_level + 1; i_slave_level < mNumberOfLevels; ++i_slave_level)
                 {
-                    for (auto &patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
+                    for (auto &slave_patch_param : mParameters[i_slave_level]) // Loop over all other slave patches
                     {
-                        patch_param.ValidateAndAssignDefaults(parameters_for_validation);
-                        KRATOS_INFO_IF("ApplyChimera : Formulating Chimera for the combination   : ", mEchoLevel > 0) << "\n\tBackground\n" << background_param << "\n\tPatch \n" << patch_param << std::endl;
+                        KRATOS_INFO_IF("Formulating Chimera for the combination :: ", mEchoLevel > 0) << "\n :: Background :: \n" << background_patch_param << "\n :: Patch :: \n" << slave_patch_param << std::endl;
+                        slave_patch_param.ValidateAndAssignDefaults(parameters_for_validation);
                         if (i_current_level == 0) // a check to identify computational Domain boundary
                             domain_type = ChimeraHoleCuttingUtility::Domain::OTHER;
-                        FormulateChimera(background_param, patch_param, domain_type);
-                        mPointLocatorsMap.erase(background_param["model_part_name"].GetString());
+                        FormulateChimera(background_patch_param, slave_patch_param, domain_type);
+                        mPointLocatorsMap.erase(background_patch_param["model_part_name"].GetString());
                     }
                 }
             }
