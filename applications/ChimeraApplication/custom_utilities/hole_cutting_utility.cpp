@@ -402,14 +402,14 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
             if(is_my_node) ++cond_local_nodes;
         }
 
-        //if(cond_on_interface && !cond_local)
-        if(cond_on_interface && cond_local_nodes < (int)(i_cond.GetGeometry().size()/2) ){
+        if(cond_on_interface && !cond_local){
+        //if(cond_on_interface && cond_local_nodes < (int)(i_cond.GetGeometry().size()/2) ){
             // Create vector that stores all node is of current i_face
             vector<IndexType> ids(i_cond.GetGeometry().size());
             // Store node ids
             int i=0;
             for(auto& i_node : i_cond.GetGeometry())
-                ids[++i] = i_node.Id();
+                ids[i++] = i_node.Id();
 
             //*** THE ARRAY OF IDS MUST BE ORDERED!!! ***
             std::sort(ids.begin(), ids.end());
