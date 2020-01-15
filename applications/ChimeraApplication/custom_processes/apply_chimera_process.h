@@ -822,7 +822,7 @@ private:
             r_comm.Max(patch_boundary_extraction_time_elapsed, 0);
             KRATOS_INFO_IF("ApplyChimera : Extraction of patch boundary took         : ", mEchoLevel > 0) << patch_boundary_extraction_time_elapsed << " seconds" << std::endl;
 
-            return r_modified_patch_boundary_model_part; 
+            return r_modified_patch_boundary_model_part;
         }
         else
         {

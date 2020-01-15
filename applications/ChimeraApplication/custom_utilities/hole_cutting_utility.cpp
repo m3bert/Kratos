@@ -71,7 +71,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
                     0.0;
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_Y, 0) =
                     0.0;
-                if (num_nodes_per_elem - 1 > 2)
+                if (TDim > 2)
                     i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_Z, 0) =
                         0.0;
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(PRESSURE, 0) = 0.0;
@@ -79,7 +79,7 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
                     0.0;
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_Y, 1) =
                     0.0;
-                if (num_nodes_per_elem - 1 > 2)
+                if (TDim > 2)
                     i_element.GetGeometry()[j].FastGetSolutionStepValue(VELOCITY_Z, 1) =
                         0.0;
                 i_element.GetGeometry()[j].FastGetSolutionStepValue(PRESSURE, 1) = 0.0;
@@ -106,16 +106,10 @@ void ChimeraHoleCuttingUtility::RemoveOutOfDomainElements(
     std::set<IndexType> s(vector_of_node_ids.begin(), vector_of_node_ids.end());
     vector_of_node_ids.assign(s.begin(), s.end());
     rRemovedModelPart.AddNodes(vector_of_node_ids);
-    const auto &r_comm = rModelPart.GetCommunicator().GetDataCommunicator();
 
-
-    // Taking care of the communicator stuff.
-    if (r_comm.IsDistributed())
-    {
 #ifdef KRATOS_USING_MPI
         ParallelFillCommunicator(rRemovedModelPart).Execute();
 #endif
-    }
 
     KRATOS_CATCH("");
 }
@@ -459,7 +453,8 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
             cond_local = cond_local && (i_node.GetSolutionStepValue(PARTITION_INDEX) == my_rank);
         }
 
-        if(cond_on_interface && !cond_local)
+        //if(cond_on_interface && !cond_local)
+        if(cond_on_interface)
             cond_ids_to_remove.push_back(i_cond.Id());
     }
 
