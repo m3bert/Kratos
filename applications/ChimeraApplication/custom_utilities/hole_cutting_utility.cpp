@@ -374,6 +374,28 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     if(is_distributed)
         CheckInterfaceConditionsInMPI(rVolumeModelPart, rExtractedBoundaryModelPart, faces_elem_id_map);
 
+    Parameters vtk_parameters(R"(
+            {
+                "output_control_type"                : "step",
+                "output_frequency"                   : 1,
+                "file_format"                        : "binary",
+                "output_precision"                   : 3,
+                "output_sub_model_parts"             : false,
+                "folder_name"                        : "test_vtk_output",
+                "save_output_files_in_folder"        : false,
+                "nodal_solution_step_data_variables" : ["PARTITION_INDEX"],
+                "nodal_data_value_variables"         : [],
+                "element_flags"                      : [],
+                "nodal_flags"                        : [],
+                "element_data_value_variables"       : [],
+                "condition_data_value_variables"     : [],
+                "write_ids"                          :true
+            }
+            )");
+
+    VtkOutput vtk_output(rExtractedBoundaryModelPart, vtk_parameters);
+    vtk_output.PrintOutput();
+
     KRATOS_CATCH("");
 }
 
@@ -443,28 +465,6 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
                                  vector_of_node_ids.end());
     vector_of_node_ids.assign(sort_set.begin(), sort_set.end());
     rExtractedBoundaryModelPart.AddNodes(vector_of_node_ids);
-
-        Parameters vtk_parameters(R"(
-                {
-                    "output_control_type"                : "step",
-                    "output_frequency"                   : 1,
-                    "file_format"                        : "binary",
-                    "output_precision"                   : 3,
-                    "output_sub_model_parts"             : false,
-                    "folder_name"                        : "test_vtk_output",
-                    "save_output_files_in_folder"        : false,
-                    "nodal_solution_step_data_variables" : ["PARTITION_INDEX"],
-                    "nodal_data_value_variables"         : [],
-                    "element_flags"                      : [],
-                    "nodal_flags"                        : [],
-                    "element_data_value_variables"       : [],
-                    "condition_data_value_variables"     : [],
-                    "write_ids"                          :true
-                }
-                )");
-
-        VtkOutput vtk_output(rExtractedBoundaryModelPart, vtk_parameters);
-        vtk_output.PrintOutput();
 
 #ifdef KRATOS_USING_MPI
     ParallelFillCommunicator(rExtractedBoundaryModelPart).Execute();
