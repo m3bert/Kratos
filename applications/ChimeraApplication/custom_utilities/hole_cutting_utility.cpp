@@ -448,13 +448,16 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
     for(auto& i_cond : rExtractedBoundaryModelPart.Conditions()){
         bool cond_on_interface = true;
         bool cond_local = true;
+        int cond_local_nodes = 0;
         for(auto& i_node : i_cond.GetGeometry()){
             cond_on_interface = cond_on_interface && r_interface_mesh.HasNode(i_node.Id());
-            cond_local = cond_local && (i_node.GetSolutionStepValue(PARTITION_INDEX) == my_rank);
+            bool is_my_node = (i_node.GetSolutionStepValue(PARTITION_INDEX) == my_rank);
+            cond_local = cond_local && is_my_node;
+            if(is_my_node) ++cond_local_nodes;
         }
 
         //if(cond_on_interface && !cond_local)
-        if(cond_on_interface)
+        if(cond_on_interface && cond_local_nodes > (int)(i_cond.GetGeometry().size()/2) )
             cond_ids_to_remove.push_back(i_cond.Id());
     }
 
