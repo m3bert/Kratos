@@ -79,6 +79,41 @@ public:
         OTHER=-1
     };
 
+    // Needed structures for the ExtractSurfaceMesh operation
+    struct KeyComparator
+    {
+        bool operator()(const vector<IndexType> &lhs,
+                        const vector<IndexType> &rhs) const
+        {
+            if (lhs.size() != rhs.size())
+                return false;
+            for (IndexType i = 0; i < lhs.size(); i++)
+                if (lhs[i] != rhs[i])
+                    return false;
+            return true;
+        }
+    };
+
+    struct KeyHasher
+    {
+        IndexType operator()(const vector<int> &k) const
+        {
+            IndexType seed = 0.0;
+            std::hash<int> hasher;
+            for (IndexType i = 0; i < k.size(); i++)
+                seed ^= hasher(k[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            return seed;
+        }
+    };
+
+    // Some type-definitions
+    typedef std::unordered_map<vector<IndexType>, IndexType, KeyHasher,
+                               KeyComparator>
+        hashmap;
+    typedef std::unordered_map<vector<IndexType>, vector<IndexType>, KeyHasher,
+                               KeyComparator>
+        hashmap_vec;
+
     ///@}
     ///@name Pointer Definitions
     /// Pointer definition of ChimeraHoleCuttingUtility
@@ -147,7 +182,7 @@ public:
 
 
 
-    void CheckInterfaceConditionsInMPI(ModelPart& rVolumeModelPart, ModelPart& rExtractedBoundaryModelPart);
+    void CheckInterfaceConditionsInMPI(ModelPart& rVolumeModelPart, ModelPart& rExtractedBoundaryModelPart, hashmap& rFaceElemMap);
     /// Assignment operator.
     ChimeraHoleCuttingUtility &operator=(ChimeraHoleCuttingUtility const &rOther) = delete;
 

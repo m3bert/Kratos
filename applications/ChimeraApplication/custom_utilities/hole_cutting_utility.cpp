@@ -121,32 +121,6 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 {
     KRATOS_TRY;
 
-    // Needed structures for the ExtractSurfaceMesh operation
-    struct KeyComparator
-    {
-        bool operator()(const vector<IndexType> &lhs,
-                        const vector<IndexType> &rhs) const
-        {
-            if (lhs.size() != rhs.size())
-                return false;
-            for (IndexType i = 0; i < lhs.size(); i++)
-                if (lhs[i] != rhs[i])
-                    return false;
-            return true;
-        }
-    };
-
-    struct KeyHasher
-    {
-        IndexType operator()(const vector<int> &k) const
-        {
-            IndexType seed = 0.0;
-            std::hash<int> hasher;
-            for (IndexType i = 0; i < k.size(); i++)
-                seed ^= hasher(k[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-            return seed;
-        }
-    };
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
     const bool &is_distributed = r_comm.IsDistributed();
 
@@ -156,17 +130,10 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     //        "triangular elements"
     //     << std::endl;
 
-    // Some type-definitions
-    typedef std::unordered_map<vector<IndexType>, IndexType, KeyHasher,
-                               KeyComparator>
-        hashmap;
-    typedef std::unordered_map<vector<IndexType>, vector<IndexType>, KeyHasher,
-                               KeyComparator>
-        hashmap_vec;
-
     // Create map to ask for number of faces for the given set of node ids
     // representing on face in the model part
     hashmap n_faces_map;
+    hashmap faces_elem_id_map;
     const int num_elements =
         static_cast<int>(rVolumeModelPart.NumberOfElements());
     const auto elements_begin = rVolumeModelPart.ElementsBegin();
@@ -193,6 +160,8 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
 // Fill the map
 #pragma omp critical
             n_faces_map[ids] += 1;
+
+            faces_elem_id_map[ids] = i_element->Id();
         }
     }
     // Create a map to get nodes of skin face in original order for given set of
@@ -403,12 +372,12 @@ void ChimeraHoleCuttingUtility::ExtractBoundaryMesh(
     rExtractedBoundaryModelPart.RemoveNodes(TO_ERASE);
 
     if(is_distributed)
-        CheckInterfaceConditionsInMPI(rVolumeModelPart, rExtractedBoundaryModelPart);
+        CheckInterfaceConditionsInMPI(rVolumeModelPart, rExtractedBoundaryModelPart, faces_elem_id_map);
 
     KRATOS_CATCH("");
 }
 
-void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolumeModelPart, ModelPart& rExtractedBoundaryModelPart)
+void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolumeModelPart, ModelPart& rExtractedBoundaryModelPart, hashmap& rFaceElemMap)
 {
 
     const auto &r_comm = rVolumeModelPart.GetCommunicator();
@@ -434,8 +403,26 @@ void ChimeraHoleCuttingUtility::CheckInterfaceConditionsInMPI(ModelPart& rVolume
         }
 
         //if(cond_on_interface && !cond_local)
-        if(cond_on_interface && cond_local_nodes > (int)(i_cond.GetGeometry().size()/2) )
-            cond_ids_to_remove.push_back(i_cond.Id());
+        if(cond_on_interface && cond_local_nodes < (int)(i_cond.GetGeometry().size()/2) ){
+            // Create vector that stores all node is of current i_face
+            vector<IndexType> ids(i_cond.GetGeometry().size());
+            // Store node ids
+            int i=0;
+            for(auto& i_node : i_cond.GetGeometry())
+                ids[++i] = i_node.Id();
+
+            //*** THE ARRAY OF IDS MUST BE ORDERED!!! ***
+            std::sort(ids.begin(), ids.end());
+
+            auto& r_face_elem = rVolumeModelPart.Elements()( rFaceElemMap[ids] );
+            bool all_nodes_on_interface = true;
+            for(auto& node : r_face_elem->GetGeometry())
+                all_nodes_on_interface = all_nodes_on_interface && r_interface_mesh.HasNode(node.Id());
+
+            if(!all_nodes_on_interface)
+                cond_ids_to_remove.push_back(i_cond.Id());
+        }
+
     }
 
     for(const int& cond_id : cond_ids_to_remove){
